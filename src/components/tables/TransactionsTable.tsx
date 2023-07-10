@@ -7,7 +7,7 @@ import { FormNextLink } from "grommet-icons";
 import {
   Address,
   formatNumber,
-  RelativeTimer,
+  DateTime,
   PaginationNavigator,
   PaginationRecordsPerPage,
   ONEValue,
@@ -22,7 +22,7 @@ function getColumns(props: any) {
       size: "xxsmall",
       resizeable: false,
       header: (
-        <Text color="minorText" size="small" style={{ fontWeight: 300 }}>
+        <Text color="minorText" size="small">
           Shard
         </Text>
       ),
@@ -43,7 +43,7 @@ function getColumns(props: any) {
       size: "xsmall",
       resizeable: false,
       header: (
-        <Text color="minorText" size="small" style={{ fontWeight: 300 }}>
+        <Text color="minorText" size="small">
           Hash
         </Text>
       ),
@@ -65,7 +65,7 @@ function getColumns(props: any) {
       size: "260px",
       resizeable: false,
       header: (
-        <Text color="minorText" size="small" style={{ fontWeight: 300 }}>
+        <Text color="minorText" size="small">
           Block number
         </Text>
       ),
@@ -89,7 +89,7 @@ function getColumns(props: any) {
       size: "large",
       resizeable: false,
       header: (
-        <Text color="minorText" size="small" style={{ fontWeight: 300 }}>
+        <Text color="minorText" size="small">
           From
         </Text>
       ),
@@ -100,7 +100,7 @@ function getColumns(props: any) {
       size: "large",
       resizeable: false,
       header: (
-        <Text color="minorText" size="small" style={{ fontWeight: 300 }}>
+        <Text color="minorText" size="small">
           To
         </Text>
       ),
@@ -111,7 +111,7 @@ function getColumns(props: any) {
       size: "380px",
       resizeable: false,
       header: (
-        <Text color="minorText" size="small" style={{ fontWeight: 300 }}>
+        <Text color="minorText" size="small">
           ONEValue
         </Text>
       ),
@@ -123,23 +123,15 @@ function getColumns(props: any) {
     },
     {
       property: "timestamp",
-      size: "280px",
       resizeable: false,
       header: (
-        <Text color="minorText" size="small" style={{ fontWeight: 300 }}>
+        <Text color="minorText" size="small" style={{ width: '180px' }}>
           Timestamp
         </Text>
       ),
       render: (data: RPCTransactionHarmony) => (
         <Box direction="row" gap="xsmall" justify="end">
-          {/*<Text size="small">*/}
-          {/*  {dayjs(data.timestamp).format("YYYY-MM-DD, HH:mm:ss")},*/}
-          {/*</Text>*/}
-          <RelativeTimer
-            date={data.timestamp}
-            updateInterval={1000}
-            style={{ minWidth: "auto" }}
-          />
+          <DateTime date={data.timestamp} />
         </Box>
       ),
     },
@@ -163,6 +155,9 @@ interface TransactionTableProps {
   noScrollTop?: boolean;
   step?: number;
   primaryKey?: string;
+  showPages?: boolean
+  textType?: string
+  paginationOptions?: string[]
 }
 
 export function TransactionsTable(props: TransactionTableProps) {
@@ -182,14 +177,17 @@ export function TransactionsTable(props: TransactionTableProps) {
     hideCounter,
     noScrollTop,
     minWidth = "1310px",
+    showPages = false,
+    textType = 'transaction',
+    paginationOptions,
   } = props;
 
   const _IsLoading = isLoading;
 
-  useEffect(() => {
-    filter.offset = 0;
-    setFilter(filter);
-  }, [filter.limit]);
+  // useEffect(() => {
+  //   filter.offset = 0;
+  //   setFilter(filter);
+  // }, [filter.limit]);
 
   return (
     <>
@@ -197,12 +195,11 @@ export function TransactionsTable(props: TransactionTableProps) {
         direction="row"
         justify={hidePagination ? "start" : "between"}
         pad={{ bottom: "small" }}
-        margin={{ bottom: "small" }}
-        border={{ size: "xsmall", side: "bottom", color: "border" }}
+        margin={{ bottom: "0" }}
       >
         {!hideCounter ? (
           <Text style={{ flex: "1 1 100%" }}>
-            <b>{Math.min(limit, data.length)}</b> transaction
+            <b>{Math.min(limit, data.length)}</b> {textType}
             {data.length !== 1 ? "s" : ""} shown
           </Text>
         ) : (
@@ -217,6 +214,7 @@ export function TransactionsTable(props: TransactionTableProps) {
             elements={data}
             noScrollTop={noScrollTop}
             property="block_number"
+            showPages={showPages}
           />
         )}
       </Box>
@@ -225,30 +223,33 @@ export function TransactionsTable(props: TransactionTableProps) {
           overflow: "auto",
           opacity: _IsLoading ? "0.4" : "1",
           transition: "0.1s all",
-          minHeight: "600px",
+          minHeight: _IsLoading || data.length > 0 ? "600px" : 'unset',
         }}
       >
         {_IsLoading ? (
           <Box align={"center"} justify={"center"} flex>
             <Spinner size={"large"} />
           </Box>
-        ) : !data.length && !_IsLoading ? (
-          <Box style={{ height: "120px" }} justify="center" align="center">
-            <Text size="small">{emptyText}</Text>
-          </Box>
         ) : (
           <TableComponent
-            alwaysOpenedRowDetails={props.rowDetails ? true : false}
+            alwaysOpenedRowDetails={!!props.rowDetails}
             tableProps={{
-              className: "g-table-header",
-              style: { width: "100%", minWidth },
+              className: "g-table-transactions",
+              style: { width: "100%", minWidth, tableLayout: 'auto' },
               columns: columns ? columns : getColumns({ history }),
               data: data,
               step,
               primaryKey: props.primaryKey ? props.primaryKey : undefined,
+              background: {
+                header: {
+                  color: 'tableRowHover'
+                }
+              },
               border: {
                 header: {
-                  color: "brand",
+                  color: "border",
+                  side: 'top',
+                  size: '1px'
                 },
                 body: {
                   color: "border",
@@ -267,6 +268,11 @@ export function TransactionsTable(props: TransactionTableProps) {
           />
         )}
       </Box>
+      {!_IsLoading && data.length === 0 &&
+          <Box style={{ height: "120px" }} justify="center" align="center">
+            <Text size="small">{emptyText}</Text>
+          </Box>
+      }
       {!hidePagination && (
         <Box
           direction="row"
@@ -274,7 +280,7 @@ export function TransactionsTable(props: TransactionTableProps) {
           align="center"
           margin={{ top: "medium" }}
         >
-          <PaginationRecordsPerPage filter={filter} onChange={setFilter} />
+          <PaginationRecordsPerPage filter={filter} options={paginationOptions} onChange={setFilter} />
           <PaginationNavigator
             onChange={setFilter}
             isLoading={isLoading}
@@ -283,6 +289,7 @@ export function TransactionsTable(props: TransactionTableProps) {
             elements={data}
             noScrollTop={noScrollTop}
             property="block_number"
+            showPages={showPages}
           />
         </Box>
       )}

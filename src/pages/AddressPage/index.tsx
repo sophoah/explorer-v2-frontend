@@ -3,7 +3,6 @@ import { Text, Tabs, Tab, Box } from "grommet";
 import { BasePage, BaseContainer } from "src/components/ui";
 import { AddressDetailsDisplay, getType } from "./AddressDetails";
 import {
-  getContractsByField,
   getUserERC20Balances,
   getUserERC721Assets,
   getTokenERC721Assets,
@@ -14,64 +13,64 @@ import { useHistory, useParams } from "react-router-dom";
 import { useERC20Pool } from "src/hooks/ERC20_Pool";
 import { useERC721Pool } from "src/hooks/ERC721_Pool";
 import { useERC1155Pool } from "src/hooks/ERC1155_Pool";
-import { Transactions } from "./tabs/Transactions";
+import { Transactions } from "./tabs/transactions/Transactions";
 import {
   IUserERC721Assets,
   TRelatedTransaction,
 } from "src/api/client.interface";
 import { Inventory } from "./tabs/inventory/Inventory";
-import { getAllBalance, getBalance } from "src/api/rpc";
+import { getAllBalance, hmy_getDelegationsByDelegator, StakingDelegation } from "src/api/rpc";
 import { ISourceCode, loadSourceCode } from "../../api/explorerV1";
-import { AddressDetails } from "../../types";
+import { AddressDetails, RelatedTransaction, ShardID } from "../../types";
 import { ContractDetails } from "./ContractDetails";
 import { ERC1155Icon } from "src/components/ui/ERC1155Icon";
 import { getAddress } from "src/utils";
 import { useCurrency } from "src/hooks/ONE-ETH-SwitcherHook";
+import { HoldersTab } from "./tabs/holders/HoldersTab";
+import { parseHexToText } from "../../web3/parseHex";
+import { ToolsTab } from "./tabs/tools";
+import useQuery from "../../hooks/useQuery";
+import {getContractByAddress} from "./ContractDetails/helpers";
+import {linkedContractsMap} from "../../config";
 
 export function AddressPage() {
   const history = useHistory();
-  const tabParamName = "activeTab=";
-  let activeTab = 0;
-  try {
-    activeTab = +history.location.search.slice(
-      history.location.search.indexOf("activeTab=") + tabParamName.length
-    );
-  } catch {
-    activeTab = 0;
-  }
+  const queryParams = useQuery();
+  const activeTab = +(queryParams.get('activeTab') || 0);
 
   const [contracts, setContracts] = useState<AddressDetails | null>(null);
+  const [contractShardId, setContractShardId] = useState<ShardID | null>(null);
   const [sourceCode, setSourceCode] = useState<ISourceCode | null>(null);
   const [balance, setBalance] = useState<any>([]);
+  const [delegations, setDelegations] = useState<StakingDelegation[]>([]);
+  const [addressDescription, setAddressDescription] = useState('')
+  const [implementation, setImplementation] = useState<AddressDetails | null>(null)
+  const [implementationSourceCode, setImplementationSourceCode] = useState<ISourceCode | null>(null)
+
   const [tokens, setTokens] = useState<any>(null);
   const [inventory, setInventory] = useState<IUserERC721Assets[]>([]);
-  const [activeIndex, setActiveIndex] = useState(+activeTab);
+  const [inventoryHolders, setInventoryForHolders] = useState<
+    IUserERC721Assets[]
+    >([]);
+  const [activeIndex, setActiveIndex] = useState(activeTab);
+  const [holdersCount, setHoldersCount] = useState<number | undefined>()
   const erc20Map = useERC20Pool();
   const erc721Map = useERC721Pool();
   const erc1155Map = useERC1155Pool();
-  const currency = useCurrency();
 
   //TODO remove hardcode
   // @ts-ignore
   let { id } = useParams();
-  id = `${id}`.toLowerCase()
+  id = `${id}`.toLowerCase();
   id = id.slice(0, 3) === "one" ? getAddress(id).basicHex : id;
 
   const erc20Token = erc20Map[id] || null;
-
-  let oneAddress = id;
-
+  const erc1155Token = erc1155Map[id] || null
   let type = erc721Map[id]
     ? "erc721"
     : erc1155Map[id]
-    ? "erc1155"
-    : getType(contracts, erc20Token);
-
-  try {
-    oneAddress = getAddress(oneAddress).bech32;
-  } catch {
-    oneAddress = oneAddress;
-  }
+      ? "erc1155"
+      : getType(contracts, erc20Token);
 
   useEffect(() => {
     const getActiveIndex = () => {
@@ -95,58 +94,113 @@ export function AddressPage() {
   }, [id]);
 
   useEffect(() => {
-    // if (!!contracts) {
-    loadSourceCode(oneAddress)
-      .then(setSourceCode)
-      .catch(() => setSourceCode(null));
-    // }
-  }, [oneAddress]);
+    const getContractCode = async (id: string, shardId: ShardID) => {
+      try {
+        const data = await loadSourceCode(id, shardId)
+        return data
+      } catch (e) {
+        return null
+      }
+    }
 
-  useEffect(() => {
     const getContracts = async () => {
       try {
-        let contracts: any = await getContractsByField([0, "address", id]);
+        let { contract, shardId } = await getContractByAddress(id);
+        if (contract) {
+          const mergedContracts: any = erc721Map[contract.address]
+            ? { ...contracts, ...erc721Map[contract.address], ...contract }
+            : contract;
+          const code = await getContractCode(contract.address, shardId || 0)
+          setContracts(mergedContracts);
+          setContractShardId(shardId)
+          setSourceCode(code)
 
-        const mergedContracts: AddressDetails = erc721Map[contracts.address]
-          ? { ...contracts, ...erc721Map[contracts.address] }
-          : contracts;
+          if(contract.implementationAddress) {
+            let { contract: contractData, shardId } = await getContractByAddress(contract.implementationAddress);
+            if (contractData) {
+              const implCode = await getContractCode(contractData.address, shardId || 0)
+              console.log('Implementation contract loaded:', contractData)
+              setImplementation(contractData)
+              setImplementationSourceCode(implCode)
+            }
+          } else {
+            setImplementation(null)
+            setImplementationSourceCode(null)
+          }
+        }
 
-        setContracts(mergedContracts);
       } catch (err) {
         setContracts(null);
+        console.error('Error on loading contract:', JSON.stringify(err))
       }
     };
     getContracts();
   }, [id]);
 
   useEffect(() => {
+    const getStakingInfo = async () => {
+      try {
+        const data = await hmy_getDelegationsByDelegator(id)
+        setDelegations(data)
+      } catch (e) {
+        console.error('Cannot get staking info', (e as Error).message)
+      }
+    }
+
+    getStakingInfo()
+  }, [id])
+
+  useEffect(() => {
     const getInventory = async () => {
       try {
         if (type === "erc721" || type === "erc1155") {
-          let inventory =
-            type === "erc721"
-              ? await getTokenERC721Assets([id])
-              : await (
-                  await getTokenERC1155Assets([id])
-                ).map((item) => {
-                  if (item.meta && item.meta.image) {
-                    item.meta.image = `${process.env.REACT_APP_INDEXER_IPFS_GATEWAY}${item.meta.image}`;
-                  }
-                  return item;
-                });
+          if(type === "erc1155") {
+            setHoldersCount(0)
+          }
+          let items = type === "erc721"
+            ? await getTokenERC721Assets([id])
+            : await getTokenERC1155Assets([id])
 
-          setInventory(
-            inventory
-              .filter((item) => item.meta)
-              .map((item) => {
-                item.type = type;
-                return item;
-              })
-          );
+          items = items.map((item) => {
+            if (item.meta && item.meta.image) {
+              const {image} = item.meta
+              item.meta.image = image.includes('http')
+                ? image
+                : `${process.env.REACT_APP_INDEXER_IPFS_GATEWAY}${image}`;
+            }
+            return item;
+          })
+          // .filter((item) => item.meta)
+          .map((item) => {
+            item.type = type;
+            return item;
+          })
+
+          if(type === 'erc1155') {
+            items = items.filter((item) => item && item.ownerAddress && item.ownerAddress.startsWith('0x'))
+          }
+
+          setInventory(items);
+
+          // TODO remove after fix on backend, workaround
+          if(type === "erc1155") {
+            const holdersMap = items
+              .reduce((acc, nextItem) => {
+              const { ownerAddress } = nextItem
+              if(ownerAddress && !acc[ownerAddress.toLowerCase()]) {
+                acc[ownerAddress.toLowerCase()] = true
+              }
+              return acc
+            }, {} as Record<string, boolean>)
+            const holdersInventoryLength = Object.keys(holdersMap).length
+            const tokenHolders = erc1155Token ? erc1155Token.holders : 0
+            setHoldersCount(Math.max(holdersInventoryLength, +tokenHolders))
+          }
         } else {
           setInventory([]);
         }
       } catch (err) {
+        console.log('Cannot load inventory:', err)
         setInventory([]);
       }
     };
@@ -191,26 +245,20 @@ export function AddressPage() {
   }, [id]);
 
   const renderTitle = () => {
-    const erc1155 = erc1155Map[id] || {};
-    const { meta = {}, ...restErc1155 } = erc1155;
-    const data = {
-      ...contracts,
-      ...erc20Token,
-      address: id,
-      token: tokens,
-      ...meta,
-    };
+    const erc721Token = erc721Map[id] || {};
+    const erc1155Token = erc1155Map[id] || {};
 
     if (type === "erc20") {
-      return `HRC20 ${data.name}`;
+      return `HRC20 ${erc20Token.name || ''}`;
     }
 
     if (type === "erc721") {
-      return `ERC721 ${data.name}`;
+      return `ERC721 ${erc721Token.name || ''}`;
     }
 
     if (type === "erc1155") {
-      const title = `HRC1155 ${data.name || ""}`;
+      const title = `HRC1155 ${erc1155Token.name || ""}`;
+      const { meta = {}, ...restErc1155 } = erc1155Token;
       return meta.image ? (
         <Box direction={"row"} align={"center"}>
           <ERC1155Icon imageUrl={meta.image} />
@@ -229,26 +277,43 @@ export function AddressPage() {
     return "Address";
   };
 
-  const tabs: TRelatedTransaction[] = [
-    "transaction",
-    "staking_transaction",
-    "internal_transaction",
-    "erc20",
-    "erc721",
-    "erc1155",
-  ];
+  const txsCommonProps = {
+    onTxsLoaded: (txs: RelatedTransaction[]) => {
+      let description = ''
+      if (activeIndex === 0) {
+        const inputWithText = txs.find(tx => parseHexToText(tx.input))
+        if (inputWithText) {
+          description = 'One or more inbound transactions contains a message'
+        }
+      }
+      setAddressDescription(description)
+    }
+  }
+
+  const linkedContract = linkedContractsMap[id]
 
   return (
     <BaseContainer pad={{ horizontal: "0" }}>
-      <Text size="xlarge" weight="bold" margin={{ bottom: "medium" }}>
-        {renderTitle()}
-      </Text>
+      <Box direction={'row'} align={'baseline'} gap={'16px'}>
+        <Text size="xlarge" weight="bold" margin={{ bottom: "medium" }}>
+          {renderTitle()}
+        </Text>
+        {linkedContract &&
+            <a href={`/address/${linkedContract.address}`}>
+                <Text color={'brand'} size={'medium'}>Open {linkedContract.name} contract ({linkedContract.type})</Text>
+            </a>
+        }
+      </Box>
       <BasePage margin={{ vertical: "0" }} style={{ overflow: "inherit" }}>
         <AddressDetailsDisplay
           address={id}
+          addressDescription={addressDescription}
           contracts={contracts}
+          contractShardId={contractShardId}
           tokens={tokens}
           balance={balance}
+          delegations={delegations}
+          holdersCount={holdersCount}
         />
       </BasePage>
       <BasePage margin={{ top: "15px" }}>
@@ -264,29 +329,38 @@ export function AddressPage() {
           }}
         >
           <Tab title={<Text size="small">Transactions</Text>}>
-            <Transactions type={"transaction"} />
+            <Transactions {...txsCommonProps} type={"transaction"} />
           </Tab>
 
           <Tab title={<Text size="small">Staking</Text>}>
-            <Transactions type={"staking_transaction"} />
+            <Transactions {...txsCommonProps} type={"staking_transaction"} />
           </Tab>
 
           <Tab title={<Text size="small">Internal</Text>}>
-            <Transactions type={"internal_transaction"} />
+            <Transactions {...txsCommonProps} type={"internal_transaction"} />
           </Tab>
 
           <Tab title={<Text size="small">HRC20 Transfers</Text>}>
-            <Transactions type={"erc20"} />
+            <Transactions {...txsCommonProps} type={"erc20"} />
           </Tab>
 
-          <Tab title={<Text size="small">NFT Transfers</Text>}>
-            <Transactions type={"erc721"} />
-          </Tab>
+          {/*<Tab title={<Text size="small">NFT Transfers</Text>}>*/}
+          {/*  <Transactions {...txsCommonProps} type={"erc721"} />*/}
+          {/*</Tab>*/}
 
-          {(type === "erc721" || type === "erc1155") && inventory.length ? (
-            <Tab
-              title={<Text size="small">Inventory ({inventory.length})</Text>}
-            >
+          {type === "erc721" || type === "erc1155" || type === "erc20" ? (
+            <Tab title={<Text size="small">Holders</Text>}>
+              <HoldersTab
+                id={id}
+                type={type}
+                inventory={inventory}
+                holdersCount={holdersCount}
+              />
+            </Tab>
+          ) : null}
+
+          {(type === "erc721" || type === "erc1155") ? (
+            <Tab title={<Text size="small">Inventory ({inventory.length})</Text>}>
               <Inventory inventory={inventory} />
             </Tab>
           ) : null}
@@ -297,17 +371,24 @@ export function AddressPage() {
                 address={id}
                 contracts={contracts}
                 sourceCode={sourceCode}
+                shard={contractShardId || 0}
+                implementation={implementation}
+                implementationSourceCode={implementationSourceCode}
               />
             </Tab>
           ) : null}
 
-          {/*{type === "erc1155" && inventory.length ? (*/}
-          {/*  <Tab*/}
-          {/*    title={<Text size="small">Inventory ({inventory.length})</Text>}*/}
-          {/*  >*/}
-          {/*    <Inventory inventory={inventory} />*/}
-          {/*  </Tab>*/}
-          {/*) : null}*/}
+          {/*type === "erc20" &&
+            <Tab title={<Text size="small">Events</Text>}>
+              <EventsTab id={id} />
+            </Tab>
+          */}
+
+          {(type === "erc721" || type === "erc1155" || type === "erc20") ? (
+            <Tab title={<Text size="small">Tools</Text>}>
+              <ToolsTab contractAddress={id} showTools={true} />
+            </Tab>
+          ) : null}
         </Tabs>
       </BasePage>
     </BaseContainer>

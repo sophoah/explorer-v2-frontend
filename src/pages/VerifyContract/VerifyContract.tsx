@@ -1,5 +1,6 @@
 import {
   Box,
+  FileInput,
   Heading,
   Select,
   Spinner,
@@ -8,11 +9,15 @@ import {
   TextInput,
 } from "grommet";
 import React from "react";
-import { BaseContainer, BasePage, Button } from "src/components/ui";
+import { BasePage, Button } from "src/components/ui";
 import styled from "styled-components";
 import { IVerifyContractData, verifyContractCode } from "src/api/explorerV1";
-import { CircleAlert, StatusGood, SubtractCircle } from "grommet-icons";
-import { toaster } from "src/App";
+import { SubtractCircle } from "grommet-icons";
+import { breakpoints } from "../../responsive/breakpoints";
+import { useMediaQuery } from "react-responsive";
+import { useHistory } from "react-router-dom";
+import { getAddress, getQueryVariable } from "../../utils";
+import { getContractsByField, getTransactionByField } from "../../api/client";
 
 const Field = styled(Box)``;
 
@@ -26,55 +31,140 @@ const Wrapper = styled(Box)`
 export function uniqid(prefix = "", random = false) {
   const sec = Date.now() * 1000 + Math.random() * 1000;
   const id = sec.toString(16).replace(/\./g, "").padEnd(14, "0");
-  return `${prefix}${id}${
-    random ? `.${Math.trunc(Math.random() * 100000000)}` : ""
-  }`;
+  return `${prefix}${id}${random ? `.${Math.trunc(Math.random() * 100000000)}` : ""
+    }`;
 }
 
-export class VerifyContract extends React.Component<
+enum V_TABS {
+  SINGLE = "Single Source File",
+  MULTI = "Multiple Source Files",
+}
+
+const TabBox = styled(Box) <{ selected: boolean }>`
+  border: 1px solid ${(props) => props.theme.global.colors.border};
+  background: ${(props) =>
+    props.selected ? props.theme.global.colors.backgroundBack : "transparent"};
+  padding: 7px 12px 6px 12px;
+  border-radius: 4px;
+  margin: 5px 10px;
+`;
+
+const TabButton = (props: {
+  text: string;
+  onClick: () => void;
+  selected: boolean;
+}) => {
+  return (
+    <TabBox onClick={props.onClick} selected={props.selected}>
+      <Text size="small" color={"minorText"}>
+        {props.text}
+      </Text>
+    </TabBox>
+  );
+};
+
+
+class VerifyContractBase extends React.Component<
   {
     isLessTablet: boolean;
+    address?: string;
+    shard?: number;
   },
   IVerifyContractData
 > {
   public state: IVerifyContractData = {
     chainType: "mainnet",
-    contractAddress: "",
+    contractAddress: this.props.address || "",
     compiler: "",
-    optimizer: "no",
+    optimizer: "No",
     optimizerTimes: "",
     sourceCode: "",
     libraries: [],
     constructorArguments: "",
     contractName: "",
     isLoading: false,
+    argsLoading: false,
     statusText: "",
+    error: "",
+    tab: V_TABS.SINGLE,
+    language: 0,
+    shard: 0
+  };
+
+  getBytecode = async (shard: number) => {
+    this.setState({ ...this.state, argsLoading: true });
+
+    try {
+      if (this.state.contractAddress) {
+        const address = getAddress(this.state.contractAddress).basicHex;
+
+        const contracts: any = await getContractsByField([
+          shard,
+          "address",
+          address,
+        ]);
+
+        if (contracts?.transactionHash) {
+          const trx = await getTransactionByField([
+            shard,
+            "hash",
+            contracts.transactionHash,
+          ]);
+
+          if (trx?.input) {
+            const argStart = trx.input.lastIndexOf("0033");
+            if (argStart) {
+              this.setState({
+                ...this.state,
+                constructorArguments: trx.input.slice(argStart + 4),
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    this.setState({ ...this.state, argsLoading: false });
   };
 
   onClickSubmitBtn = async () => {
-    this.setState({ ...this.state, isLoading: true, statusText: "Pending..." });
+    this.setState({
+      ...this.state,
+      isLoading: true,
+      statusText: "Pending...",
+      error: "",
+    });
+
     const { isLoading, statusText, ...state } = this.state;
 
     try {
       const res = await verifyContractCode({
         ...state,
         libraries: this.state.libraries.map((i) => i.value),
+        shard: this.props.shard || 0
       });
 
-      if (res === true) {
+      if (res.success === true) {
         this.setState({ ...this.state, statusText: "Success" });
       } else {
-        this.setState({ ...this.state, statusText: "Error" });
+        this.setState({ ...this.state, statusText: "", error: "Error" });
       }
-    } catch {
-      this.setState({ ...this.state, statusText: "Error" });
+    } catch (e) {
+      this.setState({
+        ...this.state,
+        statusText: "",
+        // @ts-ignore
+        error: e?.message || "Error",
+      });
     } finally {
       this.setState({ ...this.state, isLoading: false });
     }
   };
 
   render() {
-    const { isLessTablet } = this.props;
+    const { isLessTablet, shard } = this.props;
     const { isLoading } = this.state;
 
     return (
@@ -85,7 +175,7 @@ export class VerifyContract extends React.Component<
         <BasePage>
           <Wrapper direction={"column"}>
             <Box direction="row" fill={true} justify="between" wrap>
-              <Field margin={"small"} width={isLessTablet ? "100%" : "47%"}>
+              <Field margin={"small"} width={isLessTablet ? "100%" : "42%"}>
                 <Text>Contract Address</Text>
                 <TextInput
                   placeholder={"ONE contract address"}
@@ -95,11 +185,12 @@ export class VerifyContract extends React.Component<
                       contractAddress: evt.currentTarget.value,
                     });
                   }}
+                  value={this.state.contractAddress}
                   disabled={isLoading}
                 />
               </Field>
 
-              <Field margin={"small"} width={isLessTablet ? "100%" : "47%"}>
+              <Field margin={"small"} width={isLessTablet ? "100%" : "42%"}>
                 <Text>Contract Name</Text>
                 <TextInput
                   placeholder={"ONE name"}
@@ -112,13 +203,25 @@ export class VerifyContract extends React.Component<
                   disabled={isLoading}
                 />
               </Field>
+
+              <Field margin={"small"} width={isLessTablet ? "100%" : "10%"}>
+                <Text>Language</Text>
+                <Select
+                    options={["Solidity", "Vyper"]}
+                    value={this.state.language === 0 ? "Solidity" : "Vyper"}
+                    onChange={({ option }) =>
+                      this.setState({ ...this.state, language: option === "Solidity" ? 0 : 1})
+                    }
+                    disabled={isLoading}
+                  />
+              </Field>
             </Box>
 
             <Box direction="row" fill={true} justify="between" wrap>
               <Field margin={"small"} width={isLessTablet ? "100%" : "30%"}>
                 <Text>Chain Type</Text>
                 <Select
-                  options={["mainnet", "testnet"]}
+                  options={["mainnet", "testnet", "devnet"]}
                   value={this.state.chainType}
                   onChange={({ option }) =>
                     this.setState({ ...this.state, chainType: option })
@@ -145,7 +248,7 @@ export class VerifyContract extends React.Component<
                 <Text>Optimizer</Text>
                 <Box direction={"row"}>
                   <Select
-                    options={["yes", "no"]}
+                    options={["Yes", "No"]}
                     value={this.state.optimizer}
                     onChange={({ option }) =>
                       this.setState({ ...this.state, optimizer: option })
@@ -167,8 +270,20 @@ export class VerifyContract extends React.Component<
                 </Box>
               </Field>
             </Box>
+            <Box direction="row" align="center" margin={{ top: "medium" }}>
+              <TabButton
+                text={V_TABS.SINGLE}
+                onClick={() => this.setState({ tab: V_TABS.SINGLE })}
+                selected={this.state.tab === V_TABS.SINGLE}
+              />
+              <TabButton
+                text={V_TABS.MULTI}
+                onClick={() => this.setState({ tab: V_TABS.MULTI })}
+                selected={this.state.tab === V_TABS.MULTI}
+              />
 
-            <Field margin={"small"}>
+            </Box>
+            {this.state.tab === V_TABS.SINGLE && <Field margin={"small"}>
               <Text>Enter the Solidity Contract Code below</Text>
               <TextArea
                 style={{ minHeight: "300px" }}
@@ -179,6 +294,61 @@ export class VerifyContract extends React.Component<
                   });
                 }}
                 disabled={isLoading}
+              />
+            </Field>}
+
+            {
+              this.state.tab === V_TABS.MULTI &&
+              <Field margin={"small"}>
+                <Text>Select multiple solidity source files</Text>
+                <FileInput
+                  name="file"
+                  max="100000"
+                  multiple
+                  onChange={event => {
+                    if (!event.target.files) return;
+                    const fileList = event.target.files;
+                    const files = [];
+                    for (let i = 0; i < fileList?.length; i += 1) {
+                      const file = fileList[i];
+                      files.push(file);
+                    }
+                    console.log(files);
+                    this.setState({fileList:files});
+                  }}
+                />
+              </Field>
+            }
+
+            <Field margin={"small"}>
+              <Box direction="row" justify="between">
+                <Box>
+                  <Text>Constructor Arguments (ABI-encoded)</Text>
+                </Box>
+                {this.state.argsLoading ? (
+                  <Box
+                    style={{ width: "120px" }}
+                    direction="row"
+                    justify="center"
+                  >
+                    <Spinner size={"xsmall"} />
+                  </Box>
+                ) : (
+                  <Box onClick={() => this.getBytecode(shard || 0)}>
+                    <Text color="#00AEE9">paste arguments from tx input</Text>
+                  </Box>
+                )}
+              </Box>
+              <TextArea
+                style={{ minHeight: "80px", height: "80px" }}
+                onChange={(evt: React.ChangeEvent<HTMLTextAreaElement>) => {
+                  this.setState({
+                    ...this.state,
+                    constructorArguments: evt.currentTarget.value,
+                  });
+                }}
+                disabled={isLoading || this.state.argsLoading}
+                value={this.state.constructorArguments}
               />
             </Field>
 
@@ -270,6 +440,18 @@ export class VerifyContract extends React.Component<
               >
                 <Text>{this.state.statusText}</Text>
               </Box>
+              {this.state.error && (
+                <Box
+                  align={"center"}
+                  justify={"center"}
+                  width={"100%"}
+                  style={{ marginTop: "10px" }}
+                >
+                  <Text style={{ overflowWrap: "anywhere" }} color="red">
+                    {this.state.error}
+                  </Text>
+                </Box>
+              )}
             </Field>
           </Wrapper>
         </BasePage>
@@ -277,3 +459,19 @@ export class VerifyContract extends React.Component<
     );
   }
 }
+
+export const VerifyContract = () => {
+  const isLessTablet = useMediaQuery({ maxDeviceWidth: breakpoints.tablet });
+  const history = useHistory();
+  const address = getQueryVariable(
+    "address",
+    history.location.search.substring(1)
+  );
+
+  const shard = getQueryVariable(
+    "shard",
+    history.location.search.substring(1)
+  );
+
+  return <VerifyContractBase isLessTablet={isLessTablet} address={address} shard={+(shard || 0)} />;
+};

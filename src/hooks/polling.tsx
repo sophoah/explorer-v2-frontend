@@ -1,15 +1,18 @@
 import { useState, useEffect, useRef, Dispatch } from 'react'
+import { getTabHidden, useWindowFocused } from './useWindowFocusHook';
 
 export type APIPollingOptions<DataType> = {
   fetchFunc: () => Promise<DataType>
   initialState: DataType
   delay: number
   onError?: (e: Error, setData?: Dispatch<any>) => void
-  updateTrigger?: any
+  updateTrigger?: any,
+  disableTabListener?: boolean
 }
 
 function useAPIPolling<DataType>(opts: APIPollingOptions<DataType>): DataType {
-  const { initialState, fetchFunc, delay, onError, updateTrigger } = opts
+  const { initialState, fetchFunc, delay, onError, updateTrigger, disableTabListener } = opts
+  const focus = useWindowFocused();
 
   const timerId = useRef<any>()
   const fetchCallId = useRef(0)
@@ -37,6 +40,9 @@ function useAPIPolling<DataType>(opts: APIPollingOptions<DataType>): DataType {
   }
 
   const pollingRoutine = () => {
+    if (getTabHidden() && !disableTabListener) {
+      return; // don't poll if the tab is hidden
+    }
     fetchCallId.current += 1
     /* tslint:disable no-floating-promises */
     fetchData(fetchCallId.current).then(() => {

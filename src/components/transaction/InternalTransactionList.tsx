@@ -17,25 +17,28 @@ interface InternalTransactionListProps {
   timestamp: string;
 }
 
-const initFilter: Filter = {
-  offset: 0,
-  limit: 10,
-  orderBy: "block_number",
-  orderDirection: "desc",
-  filters: [{ type: "gte", property: "block_number", value: 0 }],
-};
-
 export function InternalTransactionList(props: InternalTransactionListProps) {
+  const limitValue = localStorage.getItem("tableLimitValue");
+
+  const initFilter: Filter = {
+    offset: 0,
+    limit: limitValue ? +limitValue : 100,
+    orderBy: "block_number",
+    orderDirection: "desc",
+    filters: [{ type: "gte", property: "block_number", value: 0 }],
+  };
+
   const { list, hash, timestamp } = props;
   const [filter, setFilter] = useState<Filter>(initFilter);
 
-  const { limit = 10, offset = 0 } = filter;
+  const { limit = 100, offset = 0 } = filter;
   const pageSize = 10;
   const curPage = +(+offset / limit).toFixed(0) + 1;
 
   const data = list
     .sort((a, b) => (a.index > b.index ? 1 : -1))
-    .slice(pageSize * (curPage - 1), pageSize * curPage)
+    // no need in pagination
+    // .slice(pageSize * (curPage - 1), pageSize * curPage)
     .map((item) => ({ ...item }));
 
   return (
@@ -49,13 +52,20 @@ export function InternalTransactionList(props: InternalTransactionListProps) {
         emptyText={"No Internal Transactions for this hash " + hash}
         limit={+limit}
         filter={filter}
-        setFilter={setFilter}
+        setFilter={(newFilter) => {
+          if (newFilter.limit !== initFilter.limit) {
+            localStorage.setItem("tableLimitValue", "100");
+          }
+
+          setFilter(newFilter);
+        }}
         minWidth="960px"
         primaryKey={"index"}
         rowDetails={(row) => (
           <DisplaySignatureMethod
-            internalTransaction={row}
             key={`${row.from}_${row.to}`}
+            input={row && row.input ? row.input : null}
+            signatures={row && row.signatures ? row.signatures : null}
           />
         )}
       />

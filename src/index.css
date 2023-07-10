@@ -1,5 +1,29 @@
 @import-normalize;
 
+@font-face {
+    font-family: 'Nunito';
+    src: local('Nunito'), url(./assets/fonts/nunito-300.woff) format('woff'),
+    url(./assets/fonts/nunito-300.woff2) format('woff2');
+    font-weight: 300;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Nunito';
+    src: local('Nunito'), url(./assets/fonts/nunito-regular.woff) format('woff'),
+    url(./assets/fonts/nunito-regular.woff2) format('woff2');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Nunito';
+    src: local('Nunito'), url(./assets/fonts/nunito-700.woff) format('woff'),
+    url(./assets/fonts/nunito-700.woff2) format('woff2');
+    font-weight: 700;
+    font-style: normal;
+}
+
 a {
     text-decoration: none;
     outline: 0;
@@ -29,12 +53,27 @@ a {
     background: transparent !important;
 }
 
+/* Tooltip override */
 body.light > div > div[aria-hidden=false] > div > div {
-    background: #fff  !important;
-    border: 1px solid #f3f3f3;
+    box-shadow: none;
+    background: unset;
 }
 
 body.dark > div > div[aria-hidden=false] > div > div {
-    background: #1b2a5e  !important;
-    border: 1px solid #3a54b3;
+    box-shadow: none;
+    background: unset;
 }
+
+table:not(.g-table-transactions) tr:hover {
+    background: none;
+}
+
+table:not(.g-table-transactions) thead tr:first-child th, table:not(.g-table-transactions) thead tr:first-child td {
+    border: none;
+}
+
+.g-table-transactions thead tr th {
+    font-weight: 700;
+}
+
+

@@ -1,5 +1,8 @@
 import React, { FunctionComponent, useState } from "react";
-import { Log, RPCStakingTransactionHarmony } from "src/types";
+import { IHexSignature, Log, RPCStakingTransactionHarmony, RPCTransactionHarmony } from "src/types";
+import {tokenTransfersERC20} from './tokenTransfer/tokenTransfersERC20'
+// import {tokenTransfersERC721} from './tokenTransfer/tokenTransfersERC721'
+import {TokenTransfersERC1155} from './tokenTransfer/tokenTransfersERC1155'
 
 import {
   transactionPropertyDisplayNames,
@@ -7,14 +10,17 @@ import {
   transactionPropertySort,
   transactionPropertyDescriptions,
 } from "./helpers";
-import { Address, CalculateFee, TipContent } from "src/components/ui";
+import {
+  Address,
+  CalculateFee,
+  CalculateTransactionFee, formatNumber,
+  TipContent
+} from "src/components/ui";
 import { Anchor, Box, DataTable, Text, Tip } from "grommet";
 import { TransactionSubType } from "src/components/transaction/helpers";
 import { parseSuggestedEvent, DisplaySignature } from "src/web3/parseByteCode";
 
 import { CaretDownFill, CaretUpFill, CircleQuestion } from "grommet-icons";
-import { ERC20Value } from "../ERC20Value";
-import { TokenValueBalanced } from "../ui/TokenValueBalanced";
 import { TxStatusComponent } from "../ui/TxStatusComponent";
 
 const getColumns = ({ type = "" }) => [
@@ -27,12 +33,13 @@ const getColumns = ({ type = "" }) => [
           content={
             <TipContent
               message={
-                transactionPropertyDescriptions[e.key + type] ||
-                transactionPropertyDescriptions[e.key]
+                <Text size={'small'}>
+                  {transactionPropertyDescriptions[e.key + type] ||
+                    transactionPropertyDescriptions[e.key]}
+                </Text>
               }
             />
           }
-          plain
         >
           <span>
             <CircleQuestion size="small" />
@@ -54,11 +61,14 @@ const getColumns = ({ type = "" }) => [
 ];
 
 type TransactionDetailsProps = {
-  transaction: RPCStakingTransactionHarmony;
+  internalTxs?: any[];
+  transaction: RPCTransactionHarmony | RPCStakingTransactionHarmony;
+  inputSignature?: IHexSignature;
   type?: TransactionSubType;
+  stakingData?: boolean;
   logs?: Log[];
   errorMsg: string | undefined;
-  shorMoreHide?: boolean;
+  hideShowMore?: boolean;
 };
 
 type tableEntry = {
@@ -67,68 +77,41 @@ type tableEntry = {
 };
 
 // todo move out to a service to support any custom ABI
-const erc20TransferTopic =
-  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
 const tokenTransfers = (logs: Log[]) => {
-  const erc20Logs = logs.filter((l) => l.topics.includes(erc20TransferTopic));
-  const events = erc20Logs
-    .map((l) =>
-      parseSuggestedEvent("Transfer(address,address,uint256)", l.data, l.topics)
-    )
-    .filter((e) => e && e.parsed);
-
-  if (!events.length) {
-    return <>—</>;
-  }
-
   return (
-    <>
-      {events.map((e: any, index) => {
-        const val = e.parsed["$2"];
-        const address = erc20Logs[index].address;
+  <>
+    {tokenTransfersERC20(logs)}
+    {TokenTransfersERC1155(logs)}
+  </>
+  )
+}
 
-        return (
-          <Box
-            direction={"column"}
-            align={"start"}
-            pad={"xxsmall"}
-            style={{ borderRadius: "6px", marginBottom: "3px" }}
-          >
-            <Box direction={"row"}>
-              <Text size="small" color="minorText">
-                From :&nbsp;
-              </Text>
-              <Address address={e.parsed["$0"].toLowerCase()} />
-              &nbsp;
-              <Text size="small" color="minorText">
-                To :&nbsp;
-              </Text>
-              <Address address={e.parsed["$1"].toLowerCase()} />
-            </Box>
-            <Box align={"center"} direction={"row"}>
-              <Text size="small" color="minorText">
-                Value : &nbsp;
-              </Text>
-              <TokenValueBalanced
-                value={val}
-                tokenAddress={address}
-                direction={"row"}
-              />
-            </Box>
-          </Box>
-        );
-      })}
-    </>
-  );
-};
+const GasUsed = (props: { tx: RPCTransactionHarmony | RPCStakingTransactionHarmony }) => {
+  const { tx: { gas, gasLimit } } = props
+  if (gas && gasLimit) {
+    const percent = ((+gas / +gasLimit) * 100).toFixed(2)
+    return <Box direction={'row'} gap={'12px'}>
+      <Text size={'small'}>{formatNumber(+gasLimit)}</Text>
+      <Text size={'small'} color={'grey'}>|</Text>
+      <Text size={'small'}>{formatNumber(+gas)} ({percent}%)</Text>
+    </Box>
+  }
+  return <>
+    {gas}
+  </>
+}
+
 
 export const TransactionDetails: FunctionComponent<TransactionDetailsProps> = ({
   transaction,
   type,
   logs = [],
   errorMsg,
-  shorMoreHide
+  hideShowMore,
+  stakingData,
+  internalTxs = [],
+  inputSignature
 }) => {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -145,12 +128,31 @@ export const TransactionDetails: FunctionComponent<TransactionDetailsProps> = ({
       ),
     ...transaction,
     tokenTransfers: tokenTransfers(logs),
+    transactionFee: (
+      <Box justify="center">{CalculateTransactionFee(transaction)}</Box>
+    ),
+    gasUsed: (
+      <Box justify="center">
+        <GasUsed tx={transaction} />
+      </Box>
+    ),
     gasPrice: <Box justify="center">{CalculateFee(transaction)}</Box>,
   };
-  const keys = Object.keys(newTransaction);
+
+  const keys = Object.keys(newTransaction).filter((key) => {
+    if (stakingData) {
+      return (
+        ["tokenTransfers", "transactionFee", "gasPrice", "Status"].indexOf(
+          key
+        ) === -1
+      );
+    } else {
+      return key !== "gas" && key !== 'extraMark';
+    }
+  });
   const sortedKeys = keys
     .sort((a, b) => transactionPropertySort[b] - transactionPropertySort[a])
-    .filter((k) => showDetails || ["r", "s", "v"].indexOf(k) === -1);
+    .filter((k) => showDetails || ["r", "s", "v", "gasLimit"].indexOf(k) === -1);
 
   const txData = sortedKeys.reduce((arr, key) => {
     // @ts-ignore
@@ -160,7 +162,9 @@ export const TransactionDetails: FunctionComponent<TransactionDetailsProps> = ({
       key,
       // @ts-ignore
       newTransaction[key],
-      type
+      type,
+      internalTxs,
+      inputSignature
     );
 
     if (value === undefined) {
@@ -170,6 +174,9 @@ export const TransactionDetails: FunctionComponent<TransactionDetailsProps> = ({
     arr.push({ key, value } as tableEntry);
     return arr;
   }, [] as tableEntry[]);
+
+
+  const value = internalTxs
 
   return (
     <>
@@ -181,18 +188,16 @@ export const TransactionDetails: FunctionComponent<TransactionDetailsProps> = ({
           data={txData}
           step={10}
           border={{
-            header: {
-              color: "none",
-            },
+            header: false,
             body: {
               color: "border",
-              side: "top",
+              side: "bottom",
               size: "1px",
             },
           }}
         />
       </Box>
-      {shorMoreHide ? null : (
+      {hideShowMore ? null : (
         <Box align="center" justify="center" style={{ userSelect: "none" }}>
           <Anchor
             onClick={() => setShowDetails(!showDetails)}

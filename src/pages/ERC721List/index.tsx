@@ -8,30 +8,33 @@ import { useThemeMode } from "src/hooks/themeSwitcherHook";
 import { ERC721Table } from "./ERC721Table";
 import { Search } from "grommet-icons";
 
-const initFilter: Filter = {
-  offset: 0,
-  limit: 10,
-  orderBy: "block_number",
-  orderDirection: "desc",
-  filters: [{ type: "gte", property: "block_number", value: 0 }],
-};
-
 export const ERC721List = () => {
+  const limitValue = localStorage.getItem("tableLimitValue");
+
+  const initFilter: Filter = {
+    offset: 0,
+    limit: limitValue ? +limitValue : 10,
+    orderBy: "block_number",
+    orderDirection: "desc",
+    filters: [{ type: "gte", property: "block_number", value: 0 }],
+  };
+
   const [data, setData] = useState<ERC721[]>([]);
   const [filter, setFilter] = useState<Filter>(initFilter);
   const [search, setSearch] = useState<string>("");
   const erc721 = useERC721Pool();
   const themeMode = useThemeMode();
   const erc721Tokens = Object.values(erc721);
+  const searchableFields = ["name", "symbol", "address"] as Array<keyof ERC721>
 
   const searchedTokenLength = erc721Tokens.filter(
-    filterWithFields(["name", "symbol"], search)
+    filterWithFields(searchableFields, search)
   ).length;
 
   useEffect(() => {
     setData(
       erc721Tokens
-        .filter(filterWithFields(["name", "symbol"], search))
+        .filter(filterWithFields(searchableFields, search))
         .sort(sortWithHolders)
         //@ts-ignore
         .slice(filter.offset, filter.offset + filter.limit)
@@ -47,6 +50,10 @@ export const ERC721List = () => {
     if (action === "prevPage" && filter.offset > 0) {
       //@ts-ignore
       newFilter.offset = Math.max(0, filter.offset - filter.limit);
+    }
+
+    if (newFilter.limit !== initFilter.limit) {
+      localStorage.setItem("tableLimitValue", `${newFilter.limit}`);
     }
 
     if (
@@ -84,7 +91,7 @@ export const ERC721List = () => {
               backgroundColor: themeMode === "light" ? "white" : "transparent",
               fontWeight: 500,
             }}
-            placeholder="Search by Name / Symbol"
+            placeholder="Search by Name / Symbol / Address"
           />
         </Box>
         {!erc721Tokens.length && !search && (

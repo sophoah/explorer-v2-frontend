@@ -8,30 +8,33 @@ import { ERC1155Table } from "./ERC1155Table";
 import { Search } from "grommet-icons";
 import { useERC1155Pool, ERC1155 } from "src/hooks/ERC1155_Pool";
 
-const initFilter: Filter = {
-  offset: 0,
-  limit: 10,
-  orderBy: "block_number",
-  orderDirection: "desc",
-  filters: [{ type: "gte", property: "block_number", value: 0 }],
-};
-
 export const ERC1155List = () => {
+  const limitValue = localStorage.getItem("tableLimitValue");
+
+  const initFilter: Filter = {
+    offset: 0,
+    limit: limitValue ? +limitValue : 10,
+    orderBy: "block_number",
+    orderDirection: "desc",
+    filters: [{ type: "gte", property: "block_number", value: 0 }],
+  };
+
   const [data, setData] = useState<ERC1155[]>([]);
   const [filter, setFilter] = useState<Filter>(initFilter);
   const [search, setSearch] = useState<string>("");
   const erc1155 = useERC1155Pool();
   const themeMode = useThemeMode();
   const erc1155Tokens = Object.values(erc1155);
+  const searchableFields = ["name", "symbol", "address"] as Array<keyof ERC1155>
 
   const searchedTokenLength = erc1155Tokens.filter(
-    filterWithFields(["name", "symbol"], search)
+    filterWithFields(searchableFields, search)
   ).length;
 
   useEffect(() => {
     setData(
       erc1155Tokens
-        .filter(filterWithFields(["name", "symbol"], search))
+        .filter(filterWithFields(searchableFields, search))
         .sort(sortWithHolders)
         //@ts-ignore
         .slice(filter.offset, filter.offset + filter.limit)
@@ -47,6 +50,10 @@ export const ERC1155List = () => {
     if (action === "prevPage" && filter.offset > 0) {
       //@ts-ignore
       newFilter.offset = Math.max(0, filter.offset - filter.limit);
+    }
+
+    if (newFilter.limit !== initFilter.limit) {
+      localStorage.setItem("tableLimitValue", `${newFilter.limit}`);
     }
 
     if (
@@ -84,7 +91,7 @@ export const ERC1155List = () => {
               backgroundColor: themeMode === "light" ? "white" : "transparent",
               fontWeight: 500,
             }}
-            placeholder="Search by Name / Symbol"
+            placeholder="Search by Name / Symbol / Address"
           />
         </Box>
         {!erc1155Tokens.length && !search && (

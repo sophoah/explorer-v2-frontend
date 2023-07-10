@@ -40,11 +40,13 @@ export function ERC1155Icon(props: IERC1155IconProps) {
   const [isErrorLoading, setIsErrorLoading] = useState(false);
 
   const url = props.imageUrl
-    ? `${process.env.REACT_APP_INDEXER_IPFS_GATEWAY}${props.imageUrl}`
+    ? props.imageUrl.indexOf('http') === 0
+      ? props.imageUrl
+      : `${process.env.REACT_APP_INDEXER_IPFS_GATEWAY}${props.imageUrl}`
     : "";
 
   return (
-    <Box style={{ marginLeft: "15px" }}>
+    <Box>
       {isLoading ? (
         <Loader>
           <Box align={"center"} justify={"center"} flex height={"100%"}>

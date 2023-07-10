@@ -16,6 +16,9 @@ import { useERC1155Pool } from "src/hooks/ERC1155_Pool";
 import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { Address } from "./Address";
+import { config } from "../../config";
+import {getAddressByName, OneCountryTLD} from "../../utils/oneCountry";
+import {toaster} from "../../App";
 
 let timeoutID: any | null = null;
 
@@ -24,6 +27,11 @@ export interface ISearchItem {
   name: string;
   type: "erc1155" | "erc20" | "erc721";
   item: any;
+}
+
+const oneCountryPostfix = {
+  dotOne: '.1',
+  dotCountry: OneCountryTLD
 }
 
 export const SearchInput = () => {
@@ -58,9 +66,7 @@ export const SearchInput = () => {
     })),
   ];
 
-  const availableShards = (process.env.REACT_APP_AVAILABLE_SHARDS as string)
-    .split(",")
-    .map((t) => +t);
+  const { availableShards } = config
 
   const history = useHistory();
   const onChange = useCallback((event) => {
@@ -93,6 +99,33 @@ export const SearchInput = () => {
         history.push(`/block/${v}`);
         setValue("");
         return;
+      }
+
+      if(config.oneCountryContractAddress) {
+        const onePostfix = v.endsWith(oneCountryPostfix.dotOne)
+        const countryPostfix = v.endsWith(oneCountryPostfix.dotCountry)
+        if(onePostfix || countryPostfix) {
+          const [prefix] = v.split(onePostfix ? oneCountryPostfix.dotOne : oneCountryPostfix.dotCountry);
+          if(prefix) {
+            try {
+              const address = await getAddressByName(prefix);
+              if(address) {
+                history.push(`/address/${address}`);
+              } else {
+                toaster.show({
+                  message: () => (
+                    <Box direction={"row"} align={"center"} pad={"small"}>
+                      <Text size={"small"}>Address for "{v}" not found</Text>
+                    </Box>
+                  ),
+                  time: 5000
+                })
+              }
+            } catch (e) {
+              console.log('Cannot get one country address', e)
+            }
+          }
+        }
       }
 
       if (v.length !== 66 && v.length !== 42) {
@@ -186,7 +219,9 @@ export const SearchInput = () => {
       }
     };
 
-    exec();
+    if(readySubmit) {
+      exec();
+    }
   }, [readySubmit]);
 
   const Row = (options: { index: number; style: any }) => {
@@ -277,6 +312,7 @@ export const SearchInput = () => {
         style={{
           backgroundColor: themeMode === "light" ? "white" : "transparent",
           fontWeight: 500,
+          borderRadius: '8px'
         }}
         placeholder="Search by Address / Transaction Hash / Block / Token"
       />
@@ -308,10 +344,10 @@ export const SearchInput = () => {
             {({ height, width }) => (
               <List
                 className="List"
-                height={height}
+                height={height as number}
                 itemCount={results.length}
                 itemSize={40}
-                width={width}
+                width={width as number}
               >
                 {Row}
               </List>

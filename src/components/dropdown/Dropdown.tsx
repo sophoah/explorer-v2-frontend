@@ -1,4 +1,4 @@
-import { Box, TextInput } from "grommet";
+import { Box, BoxProps, TextInput } from "grommet";
 import { CaretDownFill, CaretUpFill, Search } from "grommet-icons";
 import React, { Fragment } from "react";
 import styled, { css } from "styled-components";
@@ -7,6 +7,7 @@ export interface IDropdownProps<T = {}> {
   defaultValue?: T;
   value?: T;
   className?: string;
+  padDataList?: BoxProps["pad"];
   keyField: keyof T;
   renderValue: (dataItem: T) => JSX.Element;
   renderItem: (dataItem: T) => JSX.Element;
@@ -20,7 +21,7 @@ export interface IDropdownProps<T = {}> {
   onToggle?: (isOpen: boolean) => void;
   onClickItem?: (dataItem: T) => void;
   themeMode: "dark" | "light";
-  itemHeight: string;
+  itemHeight?: string;
   itemStyles: React.CSSProperties;
 }
 
@@ -31,12 +32,10 @@ const DropdownWrapper = styled(Box)`
   border-radius: 8px;
   margin: 5px;
   position: relative;
-  user-select: none;
 `;
 
 const Value = styled(Box)`
   width: 100%;
-  cursor: pointer;
 `;
 
 const DataList = styled(Box)`
@@ -51,13 +50,12 @@ const DataList = styled(Box)`
 `;
 
 const DataItem = styled(Box)<{
-  itemHeight: string;
+  itemHeight?: string;
 }>`
-  cursor: pointer;
 
   ${(props) => {
     return css`
-      min-height: ${props.itemHeight};
+      min-height: ${props.itemHeight || 'unset'};
     `;
   }}
 `;
@@ -66,7 +64,7 @@ export class Dropdown<T = {}> extends React.Component<
   IDropdownProps<T>,
   { isOpen: boolean; searchText: string }
 > {
-  public element!: HTMLDivElement;
+  public element: React.RefObject<HTMLDivElement>;
 
   public initValue: T = this.props.defaultValue || this.props.items[0];
 
@@ -79,6 +77,12 @@ export class Dropdown<T = {}> extends React.Component<
     searchText: "",
   };
 
+  constructor(props: any) {
+    super(props);
+
+    this.element = React.createRef();
+  }
+
   componentDidMount() {
     document.body.addEventListener("click", this.handleClickBody as any);
   }
@@ -87,9 +91,16 @@ export class Dropdown<T = {}> extends React.Component<
     document.body.removeEventListener("click", this.handleClickBody as any);
   }
 
+  setOpened = (isOpen: boolean) => {
+    this.setState({ ...this.state, isOpen });
+    if (this.props.onToggle) {
+      this.props.onToggle(isOpen)
+    }
+  }
+
   handleClickBody = (e: React.MouseEvent<HTMLElement>) => {
-    if (!(this.element && this.element.contains(e.target as Node))) {
-      this.setState({ ...this.state, isOpen: false });
+    if (!(this.element && this.element.current && this.element.current.contains(e.target as Node))) {
+      this.setOpened(false)
     }
   };
 
@@ -100,14 +111,14 @@ export class Dropdown<T = {}> extends React.Component<
       this.props.onClickItem(item);
     }
 
-    this.setState({ ...this.state, isOpen: false });
+    // this.setOpened(false)
   };
 
   renderGroupItems() {
     const {
       group = [],
       searchable,
-      itemHeight = "47px",
+      // itemHeight = "47px",
       itemStyles = {},
     } = this.props;
 
@@ -123,14 +134,14 @@ export class Dropdown<T = {}> extends React.Component<
         );
 
       return items.length ? (
-        <Fragment key={`${groupItem.groupBy}`}>
+        <Fragment key={String(groupItem.groupBy)}>
           <Fragment>{groupItem.renderGroupItem()}</Fragment>
-          {items.map((item) => (
+          {items.map((item, index) => (
             <DataItem
-              key={`${item[this.props.keyField]}`}
+              key={`${item[this.props.keyField] || index}`}
               background={"backgroundDropdownItem"}
               onClick={(evt) => this.onClickItem(item, evt)}
-              itemHeight={itemHeight}
+              itemHeight={this.props.itemHeight}
               style={{ ...itemStyles }}
             >
               {this.props.renderItem(item)}
@@ -146,19 +157,20 @@ export class Dropdown<T = {}> extends React.Component<
       group = [],
       searchable,
       themeMode,
-      itemHeight = "47px",
+      // itemHeight = "47px",
       itemStyles = {},
+      padDataList = "small",
     } = this.props;
 
     return (
       <DropdownWrapper
         className={this.props.className}
-        ref={(element) => (this.element = element as HTMLDivElement)}
+        ref={this.element}
         border={{ size: "xsmall", color: "border" }}
       >
         <Value
           onClick={() => {
-            this.setState({ ...this.state, isOpen: !this.state.isOpen });
+            this.setOpened(!this.state.isOpen)
           }}
           direction={"row"}
           flex
@@ -167,26 +179,25 @@ export class Dropdown<T = {}> extends React.Component<
           {this.state.isOpen ? (
             <CaretUpFill
               onClick={(e) => {
-                console.log('CLICK') 
-                e.stopPropagation()
-                this.setState({ ...this.state, isOpen: false });
+                console.log("CLICK");
+                e.stopPropagation();
+                this.setOpened(false)
               }}
             />
           ) : (
             <CaretDownFill
               onClick={(e) => {
-                e.stopPropagation()
-                this.setState({ ...this.state, isOpen: true });
+                e.stopPropagation();
+                this.setOpened(true)
               }}
             />
           )}
         </Value>
         {this.state.isOpen ? (
           <DataList
-            pad="xsmall"
             background="background"
             border={{ size: "xsmall", color: "border" }}
-            style={{ borderRadius: "0px" }}
+            pad={padDataList}
           >
             {searchable ? (
               <TextInput
@@ -209,11 +220,11 @@ export class Dropdown<T = {}> extends React.Component<
             ) : null}
             {group.length
               ? this.renderGroupItems()
-              : this.props.items.map((item) => (
+              : this.props.items.map((item, index) => (
                   <DataItem
-                    key={`${item[this.props.keyField]}`}
+                    key={`${item[this.props.keyField] || index}`}
                     onClick={(evt) => this.onClickItem(item, evt)}
-                    itemHeight={itemHeight}
+                    itemHeight={this.props.itemHeight}
                     style={{ ...itemStyles }}
                   >
                     {this.props.renderItem(item)}

@@ -1,4 +1,6 @@
+import { ShardID } from "src/types";
 import { AbiItem } from "web3-utils";
+import { getContractsByField } from "./client";
 
 export interface IVerifyContractData {
   contractAddress: string;
@@ -12,6 +14,12 @@ export interface IVerifyContractData {
   contractName: string;
   statusText: string;
   isLoading: boolean;
+  argsLoading: boolean;
+  error: string;
+  tab: string;
+  fileList?: File[];
+  language: number;
+  shard?: 0;
 }
 
 export interface IVerifyContractDataSendData {
@@ -24,31 +32,88 @@ export interface IVerifyContractDataSendData {
   constructorArguments: string;
   chainType: string;
   contractName: string;
+  fileList?: File[],
+  tab: string,
+  shard?: number
+
 }
 
 export const verifyContractCode = async (data: IVerifyContractDataSendData) => {
-  const response = await fetch(
-    `${process.env.REACT_APP_EXPLORER_V1_API_URL}codeVerification`,
-    {
-      method: "POST",
-      mode: "cors",
-      cache: "no-cache",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      redirect: "follow",
-      referrerPolicy: "no-referrer",
-      body: JSON.stringify(data),
-    }
-  );
 
-  return await response.json();
+  if (data.tab === "Multiple Source Files") {
+    console.log("Handling multiple files");
+    const formData = new FormData();
+    data.fileList?.forEach(file => {
+      formData.append(file.name, file);
+    });
+
+    for (const [k, v] of Object.entries(data)) {
+      if (k === "fileList") {
+        continue;
+      }
+
+      if (k === "language" && +v === 0) {
+        continue;
+      }
+
+      if (k === "libraries") {
+        formData.append(k, v.join(","));
+      }
+      else {
+        formData.append(k, v);
+      }
+    }
+
+    const response = await fetch(
+      `${process.env.REACT_APP_EXPLORER_V1_API_URL}codeVerification`,
+      {
+        method: "POST",
+        mode: "cors",
+        cache: "no-cache",
+        credentials: "same-origin",
+        redirect: "follow",
+        referrerPolicy: "no-referrer",
+        body: formData,
+      }
+    );
+
+    const body = await response.json();
+    if (response.status !== 200) {
+      throw new Error(body?.message);
+    }
+
+    return body;
+  }
+  else {
+    const response = await fetch(
+      `${process.env.REACT_APP_EXPLORER_V1_API_URL}codeVerification`,
+      {
+        method: "POST",
+        mode: "cors",
+        cache: "no-cache",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        redirect: "follow",
+        referrerPolicy: "no-referrer",
+        body: JSON.stringify(data),
+      }
+    );
+
+    const body = await response.json();
+
+    if (response.status !== 200) {
+      throw new Error(body?.message);
+    }
+
+    return body;
+  }
 };
 
-export const loadSourceCode = async (address: string): Promise<ISourceCode> => {
+export const loadSourceCode = async (address: string, shard: ShardID): Promise<ISourceCode> => {
   const response = await fetch(
-    `${process.env.REACT_APP_EXPLORER_V1_API_URL}fetchContractCode?contractAddress=${address}`,
+    `${process.env.REACT_APP_EXPLORER_V1_API_URL}fetchContractCode?contractAddress=${address}&shard=${shard}`,
     {
       mode: "cors",
       cache: "no-cache",
@@ -61,20 +126,13 @@ export const loadSourceCode = async (address: string): Promise<ISourceCode> => {
     }
   );
 
-  // return {
-  //   contractAddress: "one1shend7cl77j77cud0ga464xsqcq7kkveg7z88r",
-  //   compiler: "0.4.26",
-  //   optimizer: "No",
-  //   optimizerTimes: "0",
-  //   sourceCode:
-  //     "pragma solidity ^0.4.17;contract Lottery {    address public manager;    address[] public players;    function Lottery() public {        manager = msg.sender;    }    function enter() public payable {        require(msg.value > 0.01 ether);        players.push(msg.sender);    }    function random() private view returns (uint256) {        return uint256(keccak256(block.difficulty, now, players));    }    function pickWinner() public restricted {        uint256 index = random() % players.length;        players[index].transfer(this.balance);        players = new address[](0);    }    modifier restricted() {        require(msg.sender == manager);        _;    }    function getPlayers() public view returns (address[]) {        return players;    }}",
-  //   libraries: ["", "", "", "", ""],
-  //   constructorArguments: "",
-  //   chainType: "testnet",
-  //   contractName: "Lottery",
-  // };
+  const body = await response.json();
 
-  return await response.json();
+  if (response.status !== 200) {
+    throw new Error(body);
+  }
+
+  return body;
 };
 
 export interface ISourceCode {
@@ -83,9 +141,13 @@ export interface ISourceCode {
   optimizer: string;
   optimizerTimes: string;
   sourceCode: string;
+  supporting: any;
   libraries: string[];
   constructorArguments: string;
   chainType: string;
   contractName: string;
   abi?: AbiItem[];
+  proxyAddress?: string;
+  proxyDetails?: any;
+  proxy?: any;
 }

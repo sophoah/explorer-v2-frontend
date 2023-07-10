@@ -3,9 +3,12 @@ import React, { useEffect, useState } from "react";
 import { Box, DataTable, Spinner, Text } from "grommet";
 import { RPCTransactionHarmony } from "src/types";
 import { useHistory } from "react-router-dom";
-import { RelativeTimer, Address } from "src/components/ui";
+import { Address } from "src/components/ui";
 import { getTransactions } from "src/api/client";
 import { FormNextLink } from "grommet-icons";
+import { DateTime } from "../../components/ui";
+import { getTabHidden, useWindowFocused } from "src/hooks/useWindowFocusHook";
+import { config } from "../../config";
 
 function getColumns(props: any) {
   const { history } = props;
@@ -37,15 +40,14 @@ function getColumns(props: any) {
         </Text>
       ),
       render: (data: RPCTransactionHarmony) => (
-        <Text
-          size="small"
-          style={{ cursor: "pointer" }}
-          onClick={() => {
-            history.push(`/tx/${data.hash}`);
-          }}
-          color="brand"
-        >
-          <Address address={data.hash} isShort noHistoryPush />
+        <Text size="small" style={{ cursor: "pointer" }} color="brand">
+          <Address
+            type={"tx"}
+            address={data.hash}
+            isShort
+            noHistoryPush
+            hideCopyBtn
+          />
         </Text>
       ),
     },
@@ -57,7 +59,7 @@ function getColumns(props: any) {
         </Text>
       ),
       render: (data: RPCTransactionHarmony) => (
-        <Address address={data.from} isShort />
+        <Address address={data.from} isShort hideCopyBtn />
       ),
     },
     {
@@ -68,7 +70,7 @@ function getColumns(props: any) {
         </Text>
       ),
       render: (data: RPCTransactionHarmony) => (
-        <Address address={data.to} isShort />
+        <Address address={data.to} isShort hideCopyBtn />
       ),
     },
     {
@@ -79,10 +81,8 @@ function getColumns(props: any) {
         </Text>
       ),
       render: (data: RPCTransactionHarmony) => (
-        <RelativeTimer
+        <DateTime
           date={new Date(data.timestamp)}
-          updateInterval={1000}
-          style={{ textAlign: "right" }}
         />
       ),
     },
@@ -99,16 +99,21 @@ const filter = {
 };
 
 export function LatestTransactionsTable() {
+  const hidden = useWindowFocused();
+
   const history = useHistory();
   const [transactions, setTransactions] = useState<RPCTransactionHarmony[]>([]);
-  const availableShards = (process.env.REACT_APP_AVAILABLE_SHARDS as string)
-    .split(",")
-    .map((t) => +t);
+  const { availableShards } = config
 
   useEffect(() => {
     let tId = 0 as any;
     const exec = async () => {
       try {
+        const hidden = getTabHidden();
+        if (hidden) {
+          // tab is not focused 
+          return;
+        }
         let trxs = await Promise.all(
           availableShards.map((shardNumber) =>
             getTransactions([shardNumber, filter])
@@ -149,21 +154,20 @@ export function LatestTransactionsTable() {
   return (
     <Box style={{ overflow: "auto" }}>
       <DataTable
-        className={"g-table-header"}
+        className={"g-table-header g-table-header-plain"}
         style={{ width: "100%", minWidth: "620px" }}
         columns={getColumns({ history })}
         data={transactions}
         step={10}
         border={{
-          header: {
-            color: "brand",
-          },
+          header: false,
           body: {
             color: "border",
-            side: "top",
+            side: "bottom",
             size: "1px",
           },
         }}
+        background={{header: 'unset'}}
       />
     </Box>
   );

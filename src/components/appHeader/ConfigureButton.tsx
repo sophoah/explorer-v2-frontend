@@ -8,26 +8,32 @@ import {
   themeType,
 } from "src/hooks/themeSwitcherHook";
 
+import { DateFormat, setDateFormatMode, useDateFormatMode } from "src/hooks/dateFormatSwitcherHook";
+
 import {
   useCurrency,
   setCurrency,
   currencyType,
 } from "src/hooks/ONE-ETH-SwitcherHook";
+import { GearIcon } from "../ui/icons";
 
 export function ConfigureButton() {
   const theme = useThemeMode();
   const currency = useCurrency();
+  const dateFormat = useDateFormatMode();
 
   return (
     <DropButton
-      label={<Menu size="medium" color={'#fff'} />}
+      label={<GearIcon size="24px" color={'#fff'} />}
       dropAlign={{ top: "bottom", right: "right" }}
       style={{
+        height: '32px',
         border: "none",
         boxShadow: "none",
         paddingRight: "6px",
         paddingLeft: 0,
       }}
+      dropProps={{ round: '4px' }}
       dropContent={
         <Box
           pad="medium"
@@ -46,20 +52,35 @@ export function ConfigureButton() {
             ]}
             onChange={setThemeMode}
           />
+          {/*<Text*/}
+          {/*  size="small"*/}
+          {/*  weight="bold"*/}
+          {/*  margin={{ bottom: "xsmall", top: "small" }}*/}
+          {/*>*/}
+          {/*  Address style*/}
+          {/*</Text>*/}
+          {/*<ToggleButton*/}
+          {/*  value={currency}*/}
+          {/*  options={[*/}
+          {/*    { text: "Harmony", value: "ONE" },*/}
+          {/*    { text: "ETH", value: "ETH" },*/}
+          {/*  ]}*/}
+          {/*  onChange={setCurrency}*/}
+          {/*/>*/}
           <Text
             size="small"
             weight="bold"
             margin={{ bottom: "xsmall", top: "small" }}
           >
-            Address style
+            Date Format
           </Text>
           <ToggleButton
-            value={currency}
+            value={dateFormat}
             options={[
-              { text: "Harmony", value: "ONE" },
-              { text: "ETH", value: "ETH" },
+              { text: "Exact", value: DateFormat.EXACT },
+              { text: "Relative", value: DateFormat.RELATIVE },
             ]}
-            onChange={setCurrency}
+            onChange={setDateFormatMode}
           />
         </Box>
       }
@@ -71,7 +92,7 @@ interface ToggleProps {
   value: string;
   options: Array<{
     text: string;
-    value: themeType | currencyType;
+    value: themeType | currencyType | DateFormat;
   }>;
   onChange: (value: any) => void;
 }

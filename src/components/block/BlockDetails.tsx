@@ -1,4 +1,4 @@
-import React, { FunctionComponent, useState } from "react";
+import React, { FunctionComponent, useEffect, useState } from "react";
 import { Block } from "../../types";
 import {
   blockPropertyDisplayNames,
@@ -7,9 +7,11 @@ import {
   blockDisplayValues,
 } from "./helpers";
 import { TipContent } from "src/components/ui";
-import { Box, DataTable, Tip, Anchor, Text } from "grommet";
-
+import {Box, DataTable, Tip, Anchor, Text, Select} from "grommet";
 import { CircleQuestion, CaretDownFill, CaretUpFill } from "grommet-icons";
+import { useWindowFocused } from "src/hooks/useWindowFocusHook";
+import { config } from "../../config";
+const { availableShards } = config
 
 const columns = [
   {
@@ -19,7 +21,6 @@ const columns = [
         <Tip
           dropProps={{ align: { left: "right" } }}
           content={<TipContent message={blockPropertyDescriptions[e.key]} />}
-          plain
         >
           <span>
             <CircleQuestion size="small" />
@@ -39,32 +40,75 @@ const columns = [
 
 type BlockDetailsProps = {
   block: Block;
-  blockNumber: number;
+  blockShardId: number;
+  isShardIdSelectAvailable?: boolean;
+  onSelectShardId?: (shardId: number) => void;
 };
 type tableEntry = {
   key: string;
   value: any;
 };
 
+interface ShardIdSelectProps {
+  blockShardId: number
+  onSelectShardId?: (shardId: number) => void
+}
+
+const ShardIdSelect = (props: ShardIdSelectProps) => {
+  const {blockShardId, onSelectShardId = () => {}} = props
+  const value = blockShardId.toString()
+  const options = availableShards.map((id) => id.toString())
+  const renderOption = (option: string) => <Box pad={'small'}><Text size={'small'}>Shard {option}</Text></Box>
+
+  return <Box width={'xsmall'} style={{ fontSize: 'small' }}>
+    <Select
+        options={options}
+        value={value}
+        onChange={({ option }) => onSelectShardId(+option)}
+        disabled={false}
+    >
+      {renderOption}
+    </Select>
+  </Box>
+}
+
 export const BlockDetails: FunctionComponent<BlockDetailsProps> = ({
   block,
-  blockNumber,
+  blockShardId,
+  isShardIdSelectAvailable = false,
+  onSelectShardId
 }) => {
   const [showDetails, setShowDetails] = useState(true);
+  const [isNewAddress, setIsNewAddress] = useState<boolean>(false);
+  const focus = useWindowFocused();
 
-  const keys = Object.keys({ ...block, shard: blockNumber });
+  useEffect(() => {
+    let tId = 0;
+    const getActiveIndex = () => {
+      setIsNewAddress(true);
+      tId = window.setTimeout(() => setIsNewAddress(false), 1000);
+    };
+    getActiveIndex();
+
+    return () => clearTimeout(tId);
+  }, [block]);
+
+  const keys = Object.keys({ ...block, shard: blockShardId });
   const sortedKeys = keys.sort(
     (a, b) => blockPropertySort[b] - blockPropertySort[a]
   );
+  const shardIdView = isShardIdSelectAvailable
+      ? <ShardIdSelect blockShardId={blockShardId} onSelectShardId={onSelectShardId} />
+      : <Text size={"small"}>{blockShardId}</Text>
   // show 8 till gas used
   const filteredKeys = sortedKeys.filter((k, i) => showDetails || i < 8);
   const blockData = filteredKeys.reduce((arr, key) => {
     // @ts-ignore
     const value =
-      key === "shard" ? (
-        <Text size={"small"}>{blockNumber}</Text>
-      ) : (
-        blockDisplayValues(block, key, (block as any)[key])
+      key === "shard"
+          ? shardIdView
+          : (
+        blockDisplayValues(block, key, (block as any)[key], isNewAddress)
       );
 
     arr.push({ key, value } as tableEntry);
@@ -85,14 +129,12 @@ export const BlockDetails: FunctionComponent<BlockDetailsProps> = ({
           style={{ width: "100%", minWidth: "698px" }}
           columns={columns}
           data={blockData}
-          step={10}
+          step={50}
           border={{
-            header: {
-              color: "none",
-            },
+            header: false,
             body: {
               color: "border",
-              side: "top",
+              side: "bottom",
               size: "1px",
             },
           }}

@@ -1,5 +1,7 @@
 import { AbiInput } from "web3-utils";
 import { getAddress } from "src/utils";
+import {config} from "../../../config";
+import {getContractsByField} from "../../../api/client";
 
 export const convertInputs = (inputs: string[], abiInputs: AbiInput[]) => {
   return inputs.map((value, idx) => {
@@ -12,3 +14,16 @@ export const convertInputs = (inputs: string[], abiInputs: AbiInput[]) => {
     }
   });
 };
+
+export const getContractByAddress = async (contractId: string) => {
+  const { contractShardId } = config
+
+  let contract = null
+  try {
+    contract = await getContractsByField([contractShardId, "address", contractId]);
+  } catch (_) {}
+  return {
+    contract,
+    shardId: contractShardId
+  }
+}

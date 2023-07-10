@@ -8,30 +8,33 @@ import { useThemeMode } from "src/hooks/themeSwitcherHook";
 import { ERC20Table } from "./ERC20Table";
 import { Search } from "grommet-icons";
 
-const initFilter: Filter = {
-  offset: 0,
-  limit: 10,
-  orderBy: "block_number",
-  orderDirection: "desc",
-  filters: [{ type: "gte", property: "block_number", value: 0 }],
-};
-
 export const ERC20List = () => {
+  const limitValue = localStorage.getItem("tableLimitValue");
+
+  const initFilter: Filter = {
+    offset: 0,
+    limit: limitValue ? +limitValue : 10,
+    orderBy: "block_number",
+    orderDirection: "desc",
+    filters: [{ type: "gte", property: "block_number", value: 0 }],
+  };
+
   const [data, setData] = useState<Erc20[]>([]);
   const [filter, setFilter] = useState<Filter>(initFilter);
   const [search, setSearch] = useState<string>("");
   const erc20 = useERC20Pool();
   const themeMode = useThemeMode();
   const erc20Tokens = Object.values(erc20);
+  const searchableFields = ["name", "symbol", "address"] as Array<keyof Erc20>
 
   const searchedTokenLength = erc20Tokens.filter(
-    filterWithFields(["name", "symbol"], search)
+    filterWithFields(searchableFields, search)
   ).length;
 
   useEffect(() => {
     setData(
       erc20Tokens
-        .filter(filterWithFields(["name", "symbol"], search))
+        .filter(filterWithFields(searchableFields, search))
         .sort(sortWithHolders)
         //@ts-ignore
         .slice(filter.offset, filter.offset + filter.limit)
@@ -47,6 +50,10 @@ export const ERC20List = () => {
     if (action === "prevPage" && filter.offset > 0) {
       //@ts-ignore
       newFilter.offset = Math.max(0, filter.offset - filter.limit);
+    }
+
+    if (newFilter.limit !== initFilter.limit) {
+      localStorage.setItem("tableLimitValue", `${newFilter.limit}`);
     }
 
     if (
@@ -85,7 +92,7 @@ export const ERC20List = () => {
               backgroundColor: themeMode === "light" ? "white" : "transparent",
               fontWeight: 500,
             }}
-            placeholder="Search by Name / Symbol"
+            placeholder="Search by Name / Symbol / Address"
           />
         </Box>
         {!erc20Tokens.length && !search && (

@@ -10,14 +10,15 @@ import { AddressPage } from "src/pages/AddressPage";
 import { ERC20List } from "src/pages/ERC20List";
 import { ERC721List } from "src/pages/ERC721List";
 import { VerifyContract } from "./pages/VerifyContract/VerifyContract";
-import { breakpoints } from "./Responive/breakpoints";
-import { useMediaQuery } from "react-responsive";
 import { ERC1155List } from "./pages/ERC1155List";
+import { ExportData } from "./pages/ExportData";
 import { InventoryDetailsPage } from "./pages/InventoryDetailsPage/InventoryDetailsPage";
+import { ApprovalPage } from "./pages/ApprovalPage";
+import { CheckHRC } from "./pages/tools/CheckHRC";
+import { ChartsPage } from "./pages/ChartsPage";
+import { TopStatsPage } from "./pages/TopStatsPage";
 
 export function Routes() {
-  const isLessTablet = useMediaQuery({ maxDeviceWidth: breakpoints.tablet });
-
   return (
     <>
       <Switch>
@@ -47,6 +48,14 @@ export function Routes() {
           <AllTransactionsPage />
         </Route>
 
+        <Route exact path="/tools/approvals">
+          <ApprovalPage />
+        </Route>
+
+        <Route exact path="/tools/checkHrc">
+          <CheckHRC />
+        </Route>
+
         <Route path="/tx/:id">
           <TransactionPage />
         </Route>
@@ -55,7 +64,7 @@ export function Routes() {
           <StakingTransactionPage />
         </Route>
 
-        <Route path="/address/:id">
+        <Route exact path="/address/:id">
           <AddressPage />
         </Route>
 
@@ -84,7 +93,23 @@ export function Routes() {
         </Route>
 
         <Route path="/verifycontract">
-          <VerifyContract isLessTablet={isLessTablet} />
+          <VerifyContract />
+        </Route>
+
+        <Route path="/exportData">
+          <ExportData />
+        </Route>
+
+        <Route path="/charts">
+          <Route path={'/'}><ChartsPage /></Route>
+        </Route>
+
+        <Route path="/topstat">
+          <Route path={'/'}><TopStatsPage /></Route>
+        </Route>
+
+        <Route path="*">
+          <Redirect to="/" />
         </Route>
       </Switch>
     </>

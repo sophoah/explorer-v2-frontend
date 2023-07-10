@@ -9,11 +9,11 @@ import {
   PaginationNavigator,
   PaginationRecordsPerPage,
   TipContent,
-  TokenValue,
   TPaginationAction,
 } from "src/components/ui";
 import { Erc20 } from "../../hooks/ERC20_Pool";
-import { CircleQuestion } from "grommet-icons";
+import { CircleQuestion, StatusGood } from "grommet-icons";
+import { isTokenBridged } from "../../utils";
 
 interface TransactionTableProps {
   data: any[];
@@ -86,15 +86,14 @@ export function ERC721Table(props: TransactionTableProps) {
           data={data}
           primaryKey={'address'}
           border={{
-            header: {
-              color: "brand",
-            },
+            header: false,
             body: {
               color: "border",
-              side: "top",
+              side: "bottom",
               size: "1px",
             },
           }}
+          background={{header: 'unset'}}
         />
       </Box>
       <Box
@@ -128,7 +127,14 @@ function getColumns(props: any) {
           Name
         </Text>
       ),
-      render: (data: Erc20) => <Text size="small">{data.name}</Text>,
+      render: (data: Erc20) => <Box direction={'row'} style={{ display: 'flex', alignItems: 'center' }}>
+        <Text size={'small'}>{data.name}</Text>
+        {data.isBridged && <div style={{ marginLeft: "4px", height: '14px', cursor: 'pointer' }}>
+          <Tip dropProps={{ align: { bottom: "top" }}} content={<TipContent showArrow={true} message={'Token is available on Harmony Bridge'} />}>
+            <StatusGood size={'14px'} color={'successText'} />
+          </Tip>
+        </div>}
+      </Box>,
     },
     {
       property: "symbol",
@@ -184,12 +190,11 @@ function getColumns(props: any) {
             dropProps={{ align: { right: "left" } }}
             content={
               <TipContent
-                message={`last update block height ${formatNumber(
+                message={`Last update block height: ${formatNumber(
                   +data.lastUpdateBlockNumber
                 )}`}
               />
             }
-            plain
           >
             <span style={{ marginLeft: "5px" }}>
               <CircleQuestion size="small" />

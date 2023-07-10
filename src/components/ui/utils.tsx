@@ -1,8 +1,13 @@
 import Big from "big.js";
 import React from "react";
 import { useONEExchangeRate } from "src/hooks/useONEExchangeRate";
+import { calculateFee } from "../../utils/fee";
+import {RPCStakingTransactionHarmony, RPCTransactionHarmony} from "../../types";
 
-export function formatNumber(num: number, options?: Intl.NumberFormatOptions): string {
+export function formatNumber(
+  num: number,
+  options?: Intl.NumberFormatOptions
+): string {
   if (num === undefined) return "";
 
   return num.toLocaleString("en-US", options);
@@ -29,22 +34,23 @@ Big.PE = 15;
 export function CalculateFee(transaction: any) {
   const { lastPrice } = useONEExchangeRate();
 
-  const fee =
-    isNaN(transaction.gas) || isNaN(transaction.gasPrice)
-      ? 0
-      : (Number(transaction.gas) * Number(transaction.gasPrice)) /
-        10 ** 14 /
-        10000;
+  if(!(transaction && transaction.gasPrice)) {
+    return ''
+  }
 
-  const normolizedFee = Intl.NumberFormat("en-US", {
+  const fee = isNaN(transaction.gasPrice)
+    ? 0
+    : Number(transaction.gasPrice) / 10 ** 14 / 10000;
+
+  const normalizedFee = Intl.NumberFormat("en-US", {
     maximumFractionDigits: 18,
   }).format(fee);
 
   const price = lastPrice;
 
   const bi =
-    ((Big(normolizedFee) as unknown) as number) /
-    ((Big(10 ** 14) as unknown) as any);
+    (Big(normalizedFee) as unknown as number) /
+    (Big(10 ** 14) as unknown as any);
   const v = parseInt(bi.toString()) / 10000;
   let USDValue = "";
 
@@ -58,11 +64,43 @@ export function CalculateFee(transaction: any) {
 
   return (
     <>
-      {Intl.NumberFormat("en-US", { maximumFractionDigits: 18 }).format(fee)}
+      {normalizedFee} ONE
       {!USDValue || USDValue === "0.00" || USDValue == "0" ? null : (
         <>($ {USDValue})</>
       )}
     </>
   );
-  //return Math.round(fee * 10 ** 9) / 10 ** 9;
+}
+
+export function CalculateTransactionFee(transaction: RPCTransactionHarmony | RPCStakingTransactionHarmony) {
+  const { lastPrice: price } = useONEExchangeRate();
+
+  if(!(transaction && transaction.gas)) {
+    return ''
+  }
+
+  const fee = calculateFee(transaction.gas, transaction.gasPrice)
+
+  const bi =
+    (Big(fee) as unknown as number) /
+    (Big(10 ** 14) as unknown as any);
+  const v = parseInt(bi.toString()) / 10000;
+  let USDValue = "";
+
+  if (price && v > 0) {
+    USDValue = (v * +price).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      currency: "USD",
+    });
+  }
+
+  return (
+    <>
+      {fee} ONE
+      {!USDValue || USDValue === "0.00" || USDValue == "0" ? null : (
+        <>($ {USDValue})</>
+      )}
+    </>
+  );
 }

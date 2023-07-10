@@ -1,10 +1,13 @@
-import { Box, Spinner, Text, TextInput } from "grommet";
-import React, { useEffect, useState } from "react";
-import styled from "styled-components";
-import { Button } from "src/components/ui/Button";
-import Web3 from "web3";
-import { AbiItem } from "web3-utils";
-import { convertInputs } from "./helpers";
+import {Box, Spinner, Text, TextInput} from 'grommet';
+import React, {useEffect, useState} from 'react';
+import styled from 'styled-components';
+import {Button} from 'src/components/ui/Button';
+import Web3 from 'web3';
+import {AbiItem} from 'web3-utils';
+import {convertInputs} from './helpers';
+import {uniqid} from 'src/pages/VerifyContract/VerifyContract';
+import detectEthereumProvider from '@metamask/detect-provider';
+import {AbiParam} from 'src/components/ui/AbiParam';
 
 const Field = styled(Box)``;
 
@@ -35,7 +38,7 @@ export const ActionButton = styled(Button)`
   font-weight: 500;
 `;
 
-const GreySpan = styled("span")`
+const GreySpan = styled('span')`
   font-size: 14px;
   opacity: 0.7;
   font-weight: 400;
@@ -46,35 +49,43 @@ const TextBold = styled(Text)`
 `;
 
 const GAS_LIMIT = 6721900;
-const GAS_PRICE = 3000000000;
+const GAS_PRICE = 100000000000;
 
 export const AbiMethodsView = (props: {
   abiMethod: AbiItem;
   address: string;
   metamaskAddress?: string;
   index: number;
+  isRead?: boolean;
+  validChainId?: boolean;
 }) => {
-  const { abiMethod, address, index } = props;
+  const {abiMethod, address, index} = props;
   const [inputsValue, setInputsValue] = useState<string[]>(
-    [...new Array(abiMethod.inputs?.length)].map(() => "")
+    [...new Array(abiMethod.inputs?.length)].map(() => '')
   );
-  const [amount, setAmount] = useState("");
-  const [error, setError] = useState("");
-  const [result, setResult] = useState("");
+  const [multipleValue, setMultipleValue] = useState({
+    write: {},
+    read: {},
+  } as any);
+  const [amount, setAmount] = useState('');
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const query = async () => {
     try {
-      setError("");
-      setResult("");
+      setError('');
+      setResult([]);
       setLoading(true);
 
-      // @ts-ignore
-      const web3 = window.web3;
+      // fix when there are multiple ethereum providers; detect it! returns actual provider
+      const web3:any = await detectEthereumProvider();
 
-      const web3URL = web3
-        ? web3.currentProvider
-        : process.env.REACT_APP_RPC_URL_SHARD0;
+      const web3URL = props.isRead
+        ? process.env.REACT_APP_RPC_URL_SHARD0
+        : web3
+          ? web3
+          : process.env.REACT_APP_RPC_URL_SHARD0;
 
       const hmyWeb3 = new Web3(web3URL);
 
@@ -83,7 +94,7 @@ export const AbiMethodsView = (props: {
       if (abiMethod.name) {
         let res;
 
-        if (abiMethod.stateMutability === "view") {
+        if (abiMethod.stateMutability === 'view') {
           res = await contract.methods[abiMethod.name]
             .apply(contract, convertInputs(inputsValue, abiMethod.inputs || []))
             .call();
@@ -91,7 +102,9 @@ export const AbiMethodsView = (props: {
           // @ts-ignore
           const accounts = await ethereum.enable();
 
-          const account = accounts[0] || web3.eth.defaultAccount;
+          const account = accounts[0] || undefined; // if function is not a view method it will require a signer
+
+          console.log("account is", account);
 
           res = await contract.methods[abiMethod.name]
             .apply(contract, convertInputs(inputsValue, abiMethod.inputs || []))
@@ -103,9 +116,16 @@ export const AbiMethodsView = (props: {
             });
         }
 
-        setResult(typeof res === "object" ? res.status.toString() : res);
+        setResult(
+          Array.isArray(res)
+            ? res
+            : typeof res === 'object'
+              ? Object.values(res)
+              : [res.toString()]
+        );
       }
     } catch (e) {
+      // @ts-ignore
       setError(e.message);
     }
 
@@ -114,8 +134,9 @@ export const AbiMethodsView = (props: {
 
   useEffect(() => {
     if (
-      abiMethod.stateMutability !== "payable" &&
-      (!abiMethod.inputs || !abiMethod.inputs.length)
+      abiMethod.stateMutability !== 'payable' &&
+      (!abiMethod.inputs || !abiMethod.inputs.length) &&
+      props.isRead
     ) {
       query();
     }
@@ -127,17 +148,17 @@ export const AbiMethodsView = (props: {
   };
 
   return (
-    <ViewWrapper direction="column" margin={{ bottom: "medium" }}>
-      <NameWrapper background={"backgroundBack"}>
-        <Text size="small">
+    <ViewWrapper className='abi-view-wrapper' direction='column' margin={{bottom: 'medium'}}>
+      <NameWrapper background={'backgroundBack'}>
+        <Text size='small'>
           {index + 1}. {abiMethod.name}
         </Text>
       </NameWrapper>
 
-      <Box pad="20px">
-        {abiMethod.stateMutability === "payable" ? (
-          <Field gap="5px">
-            <Text size="small">
+      <Box pad='20px'>
+        {abiMethod.stateMutability === 'payable' ? (
+          <Field gap='5px'>
+            <Text size='small'>
               payableAmount <span>ONE</span>
             </Text>
             <SmallTextInput
@@ -150,36 +171,122 @@ export const AbiMethodsView = (props: {
           </Field>
         ) : null}
         {abiMethod.inputs && abiMethod.inputs.length ? (
-          <Box gap="12px">
+          <Box gap='12px'>
             {abiMethod.inputs.map((input, idx) => {
-              const name = input.name || "<input>";
+              const name = input.name || '<input>';
+              const isArrayValue = input.type.indexOf('[]') >= 0;
+              const tabMethod = props.isRead ? 'read' : 'write';
+
+              const itemValue = isArrayValue
+                ? multipleValue[tabMethod][idx] || [{value: '', id: '1'}]
+                : inputsValue[idx];
+
+              const itemType = input.type.slice(0, input.type.indexOf('[]'));
 
               return (
-                <Field gap="5px">
-                  <Text size="small">
+                <Field gap='5px' key={idx}>
+                  <Text size='small'>
                     {name} <span>({input.type})</span>
                   </Text>
-                  <SmallTextInput
-                    value={inputsValue[idx]}
-                    placeholder={`${name} (${input.type})`}
-                    onChange={(evt: React.ChangeEvent<HTMLInputElement>) =>
-                      setInputValue(evt.currentTarget.value, idx)
-                    }
-                  />
+                  {isArrayValue ? (
+                    <Box direction={'column'}>
+                      {itemValue.map(
+                        (item: {id: string; value: string}, itemId: number) => {
+                          return (
+                            <Box
+                              direction={'row'}
+                              align={'center'}
+                              margin={'small'}>
+                              <Text style={{marginRight: '10px'}}>
+                                {itemId}.
+                              </Text>
+                              <SmallTextInput
+                                key={item.id}
+                                value={item.value}
+                                placeholder={`${itemType}`}
+                                onChange={(
+                                  evt: React.ChangeEvent<HTMLInputElement>
+                                ) => {
+                                  itemValue[itemId].value =
+                                    evt.currentTarget.value;
+
+                                  setMultipleValue({
+                                    ...multipleValue,
+                                    [tabMethod]: {
+                                      ...multipleValue[tabMethod],
+                                      [idx]: itemValue,
+                                    },
+                                  });
+
+                                  setInputValue(
+                                    itemValue.map((t: any) => t.value),
+                                    idx
+                                  );
+                                }}
+                              />
+                              {itemValue.length === 1 ? null : (
+                                <ActionButton
+                                  style={{marginLeft: '10px'}}
+                                  onClick={() => {
+                                    setMultipleValue({
+                                      ...multipleValue,
+                                      [tabMethod]: {
+                                        ...multipleValue[tabMethod],
+                                        [idx]: itemValue.filter(
+                                          (removeItem: any) =>
+                                            removeItem.id !== item.id
+                                        ),
+                                      },
+                                    });
+                                  }}>
+                                  remove
+                                </ActionButton>
+                              )}
+                            </Box>
+                          );
+                        }
+                      )}
+                      <ActionButton
+                        style={{marginTop: '10px'}}
+                        onClick={() => {
+                          itemValue.push({value: '', id: uniqid()});
+
+                          setMultipleValue({
+                            ...multipleValue,
+                            [tabMethod]: {
+                              ...multipleValue[tabMethod],
+                              [idx]: itemValue,
+                            },
+                          });
+                        }}>
+                        + add one more
+                      </ActionButton>
+                    </Box>
+                  ) : (
+                    <SmallTextInput
+                      value={inputsValue[idx]}
+                      placeholder={`${name} (${input.type})`}
+                      onChange={(evt: React.ChangeEvent<HTMLInputElement>) => {
+                        setInputValue(evt.currentTarget.value, idx);
+                      }}
+                    />
+                  )}
                 </Field>
               );
             })}
           </Box>
         ) : null}
 
-        {!result || abiMethod.inputs?.length ? (
-          <Box width="100px" margin={{ top: "20px", bottom: "18px" }}>
+        {!result || abiMethod.inputs?.length || abiMethod.stateMutability !== 'view' ? (
+          <Box width='100px' margin={{top: '20px', bottom: '18px'}}>
             {loading ? (
               <Spinner />
-            ) : abiMethod.stateMutability === "view" ? (
+            ) : abiMethod.stateMutability === 'view' ? (
               <ActionButton onClick={query}>Query</ActionButton>
             ) : (
-              <ActionButton disabled={!props.metamaskAddress} onClick={query}>
+              <ActionButton
+                disabled={!props.metamaskAddress || !props.validChainId}
+                onClick={query}>
                 Write
               </ActionButton>
             )}
@@ -187,26 +294,19 @@ export const AbiMethodsView = (props: {
         ) : null}
 
         {abiMethod.outputs
-          ? abiMethod.outputs.map((input) => {
-              return (
-                <Box>
-                  {result ? (
-                    <Text size="small">
-                      {result} <GreySpan>{input.type}</GreySpan>
-                    </Text>
-                  ) : (
-                    <Text size="small">
-                      {"-> "}
-                      {input.type}
-                    </Text>
-                  )}
-                </Box>
-              );
-            })
+          ? abiMethod.outputs.map((input, idx) => {
+            return (<AbiParam
+              key={idx}
+              readonly={true}
+              type={input.type}
+              name={input.name}
+              value={result[idx]}
+            />)
+          })
           : null}
 
         {error && (
-          <Text color="red" size="small" style={{ marginTop: 5 }}>
+          <Text color='red' size='small' style={{marginTop: 5}}>
             {error}
           </Text>
         )}

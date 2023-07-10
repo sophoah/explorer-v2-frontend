@@ -41,6 +41,11 @@ export type RPCBlock = {
 
 export type LogsBloom = string;
 
+export type TokenType =
+  | "ERC20"
+  | "ERC1155"
+  | "ERC721";
+
 export type RPCBlockHarmony = {
   difficulty: string;
   extraData: string;
@@ -113,6 +118,7 @@ export type RPCTransactionHarmony = {
   to: AddressHarmony;
   gas: string;
   gasPrice: string;
+  gasLimit: string;
   hash: TransactionHarmonyHash;
   ethHash: TransactionHash;
   input: ByteCode;
@@ -141,6 +147,7 @@ export type RPCStakingTransactionHarmony = {
   to: AddressHarmony;
   gas: string;
   gasPrice: string;
+  gasLimit: string;
   hash: TransactionHarmonyHash;
   input: ByteCode;
   nonce: string;
@@ -152,6 +159,7 @@ export type RPCStakingTransactionHarmony = {
   transactionIndex: string;
   v: string;
   msg: any; // todo
+  amount?: string
 };
 
 // todo
@@ -171,6 +179,11 @@ export type Log = {
   logIndex: string;
   removed: boolean;
 };
+
+export interface LogDetailed extends Log {
+  input: string
+  timestamp: string
+}
 
 export type TraceCallTypes =
   | "CALL"
@@ -218,6 +231,7 @@ export type InternalTransaction = {
   blockNumber: BlockNumber;
   transactionHash: TransactionHash;
   signatures?: any[];
+  timestamp?: string
 };
 
 export type Transaction = {
@@ -236,17 +250,27 @@ export type Address2Transaction = {
   transactionType: AddressTransactionType;
 };
 
+export enum TransactionExtraMark {
+  normal = 'normal',
+  hasInternalONETransfers = 'hasInternalONETransfers',
+}
+
 export interface RelatedTransaction {
   transactionType: RelatedTransactionType;
   address: string;
   blockNumber: string;
-  transactionHash: string;
+  hash: string;
   from: string;
   to: string;
   value: string;
   timestamp: string;
   type?: string;
   msg?: { amount: string; delegatorAddress: string; validatorAddress: string };
+  amount?: string
+  input: string
+  gas: string
+  gasPrice: string
+  extraMark: TransactionExtraMark
 }
 
 export type RelatedTransactionType =
@@ -255,10 +279,62 @@ export type RelatedTransactionType =
   | "stacking_transaction";
 
 export interface AddressDetails {
-  creator_address: string;
-  solidityVersion: string;
-  ipfs_hash?: string;
-  meta?: { name?: string; image?: string };
-  bytecode: string;
   IPFSHash?: string
+  address: Address
+  blockHash: BlockHash
+  blockNumber: BlockNumber
+  bytecode: ByteCode
+  creatorAddress: Address
+  meta?: { name?: string; image?: string };
+  solidityVersion: string
+  transactionHash: TransactionHash
+  implementationAddress?: string
+}
+
+export interface IHexSignature {
+  hash: string;
+  signature: string;
+}
+
+// tokenAmount is erc20 token amount approved (allowance)
+// tokenId is any specific token approved for this txn (or null if not approved)
+// NOTE: tokenId of 0 may be valid, check undefined/null status!!
+export interface ApprovalDetails {
+  hash: string;
+  lastUpdated: Date;
+  assetAddress: string;
+  spender: string;
+  allowance: string;
+  action: string;
+  account: string;
+  contract: string;
+  tokenAmount?: number;
+  tokenId?: number;
+  type: TokenType;
+  isFullApproval?: boolean;
+}
+
+export interface StakingDelegationResponse {
+  Undelegations: Array<{ Amount: string, Epoch: string }>,
+  amount: string,
+  delegator_address: string,
+  reward: string,
+  validator_address: string
+}
+
+export interface TxReceipt {
+  blockHash: string;
+  blockNumber: number;
+  contractAddress: string;
+  cumulativeGasUsed: number;
+  from: string;
+  gasUsed: string;
+  logs: any[];
+  logsBloom: string;
+  root: string;
+  shardID: number;
+  status: number;
+  to: string;
+  transactionHash: string;
+  transactionIndex: number;
 }

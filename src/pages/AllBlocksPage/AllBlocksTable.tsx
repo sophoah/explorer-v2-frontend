@@ -1,18 +1,15 @@
 import React, { useEffect, useState } from "react";
-import dayjs from "dayjs";
-
 import { Box, DataTable, Text, Spinner } from "grommet";
 import { Block, Filter } from "src/types";
 import { useHistory, useParams } from "react-router-dom";
 import {
   Address,
   formatNumber,
-  RelativeTimer,
+  DateTime,
   PaginationBlockNavigator,
   PaginationRecordsPerPage,
 } from "src/components/ui";
-import { getBlocks, getCount } from "src/api/client";
-import { ShardDropdown } from "src/components/ui/ShardDropdown";
+import { getBlocks } from "src/api/client";
 
 function getColumns(props: any) {
   const { history, shardNumber } = props;
@@ -55,10 +52,7 @@ function getColumns(props: any) {
       ),
       render: (data: Block) => (
         <Box direction="row" gap="xsmall">
-          {/*<Text size="small">*/}
-          {/*  {dayjs(data.timestamp).format("YYYY-MM-DD, HH:mm:ss")},*/}
-          {/*</Text>*/}
-          <RelativeTimer date={data.timestamp} updateInterval={1000} />
+          <DateTime date={data.timestamp} />
         </Box>
       ),
     },
@@ -101,15 +95,17 @@ function getColumns(props: any) {
   ];
 }
 
-const initFilter: Filter = {
-  offset: 0,
-  limit: 10,
-  orderBy: "number",
-  orderDirection: "desc",
-  filters: [{ type: "gte", property: "number", value: 0 }],
-};
-
 export function AllBlocksTable() {
+  const limitValue = localStorage.getItem("tableLimitValue");
+
+  const initFilter: Filter = {
+    offset: 0,
+    limit: limitValue ? +limitValue : 10,
+    orderBy: "number",
+    orderDirection: "desc",
+    filters: [{ type: "gte", property: "number", value: 0 }],
+  };
+
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [filter, setFilter] = useState<Filter>(initFilter);
 
@@ -171,14 +167,21 @@ export function AllBlocksTable() {
       </Box>
       <Box style={{ overflow: "auto" }}>
         <DataTable
-          className={"g-table-header"}
+          className={"g-table-transactions"}
           style={{ width: "100%", minWidth: "1110px" }}
           columns={getColumns({ history, shardNumber })}
           data={blocks}
           step={10}
+          background={{
+            header: {
+              color: 'tableRowHover'
+            }
+          }}
           border={{
             header: {
-              color: "brand",
+              color: "border",
+              side: 'top',
+              size: '1px'
             },
             body: {
               color: "border",
@@ -194,7 +197,16 @@ export function AllBlocksTable() {
         align="center"
         margin={{ top: "medium" }}
       >
-        <PaginationRecordsPerPage filter={filter} onChange={setFilter} />
+        <PaginationRecordsPerPage
+          filter={filter}
+          onChange={(newFilter) => {
+            if (newFilter.limit !== initFilter.limit) {
+              localStorage.setItem("tableLimitValue", `${newFilter.limit}`);
+            }
+
+            setFilter(newFilter);
+          }}
+        />
         <PaginationBlockNavigator
           blocks={blocks}
           onChange={setFilter}

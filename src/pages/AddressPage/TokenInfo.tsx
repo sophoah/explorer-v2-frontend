@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Text, Tip } from "grommet";
 import {
   Address,
@@ -18,10 +18,12 @@ import { getAddress } from "src/utils/getAddress/GetAddress";
 import { useHistory } from "react-router-dom";
 import { useERC1155Pool } from "../../hooks/ERC1155_Pool";
 import { Alert } from "grommet-icons";
+import { getERC20Balance } from "../../web3/erc20Methods";
 
 interface Token {
   balance: string;
   tokenAddress: string;
+  ownerAddress: string;
   isERC20?: boolean;
   isERC721?: boolean;
   isERC1155?: boolean;
@@ -37,15 +39,45 @@ export function TokensInfo(props: { value: Token[] }) {
   const currency = useCurrency();
   const history = useHistory();
 
-  const { value } = props;
+  const [tokensList, setTokensList] = useState(props.value)
+  const [isDropdownVisible, setDropdownVisible] = useState(false)
+  const [isNodeBalancesLoaded, setNodeBalancesLoaded] = useState(false)
 
-  if (!value.filter((i) => filterWithBalance(i.balance)).length) {
+  // Tokens list was updated from parent component
+  useEffect(() => {
+    setTokensList(props.value)
+    setNodeBalancesLoaded(false)
+  }, [props.value])
+
+  useEffect(() => {
+    const loadErc20BalancesFromNode = async () => {
+      try {
+        const balances = await Promise.all(tokensList.map(async token => {
+          const balance = await getERC20Balance(token.ownerAddress, token.tokenAddress)
+          return {
+            ...token,
+            balance
+          }
+        }))
+        setTokensList(balances)
+        setNodeBalancesLoaded(true)
+        console.log('ERC20 node balances updated')
+      } catch (e) {
+        console.error('Cannot update node balances', (e as Error).message)
+      }
+    }
+    if (isDropdownVisible && !isNodeBalancesLoaded) {
+      loadErc20BalancesFromNode()
+    }
+  }, [isDropdownVisible])
+
+  if (!tokensList.filter((i) => filterWithBalance(i.balance)).length) {
     return <span>—</span>;
   }
 
-  const erc20Tokens = value
+  const erc20Tokens = tokensList
     .filter((i) => filterWithBalance(i.balance))
-    .filter((i) => i.isERC20)
+    .filter((i) => i.isERC20 && erc20Map[i.tokenAddress])
     .map((item) => ({
       ...item,
       symbol: erc20Map[item.tokenAddress].symbol,
@@ -53,18 +85,18 @@ export function TokensInfo(props: { value: Token[] }) {
     }))
     .sort((a, b) => (a.name > b.name ? 1 : -1));
 
-  const erc721Tokens = value
+  const erc721Tokens = tokensList
     .filter((i) => filterWithBalance(i.balance))
-    .filter((i) => i.isERC721)
+    .filter((i) => i.isERC721 && erc721Map[i.tokenAddress])
     .map((item) => ({
       ...item,
       symbol: erc721Map[item.tokenAddress].symbol,
       name: erc721Map[item.tokenAddress].name,
     }));
 
-  const erc1155Tokens = value
+  const erc1155Tokens = tokensList
     .filter((i) => filterWithBalance(i.balance))
-    .filter((i) => i.isERC1155)
+    .filter((i) => i.isERC1155 && erc1155Map[i.tokenAddress])
     .map((item) => ({
       ...item,
       symbol: erc1155Map[item.tokenAddress].symbol,
@@ -78,8 +110,7 @@ export function TokensInfo(props: { value: Token[] }) {
       <Box style={{ width: "550px" }}>
         <Dropdown<Token>
           keyField={"tokenID"}
-          itemHeight={"55px"}
-          itemStyles={{ padding: "5px", marginBottom: "10px" }}
+          itemStyles={{ padding: "4px", borderBottom: '1px solid', borderColor: '#f3f3f3' }}
           searchable={(item, searchText) => {
             const outPutAddress =
               currency === "ONE"
@@ -105,10 +136,9 @@ export function TokensInfo(props: { value: Token[] }) {
           themeMode={themeMode}
           items={data}
           onClickItem={(item) => {
-            history.push(`/address/${item.tokenAddress}`);
+            // history.push(`/address/${item.tokenAddress}`);
           }}
           renderItem={(item) => {
-            console.log(item);
             const symbol =
               erc20Map[item.tokenAddress]?.symbol ||
               erc721Map[item.tokenAddress]?.symbol ||
@@ -121,12 +151,12 @@ export function TokensInfo(props: { value: Token[] }) {
                   width: "100%",
                   flex: "0 0 auto",
                   justifyContent: "space-between",
-                  marginBottom: "10px",
+                  // marginBottom: "10px",
                   padding: "5px",
                 }}
               >
                 <Box direction={"row"}>
-                  <Box style={{ flex: "1 1 50%" }} direction={'row'}>
+                  <Box style={{ flex: "1 1 50%" }} direction={"row"}>
                     <Address
                       address={item.tokenAddress}
                       style={{ flex: "1 1 50%" }}
@@ -148,7 +178,6 @@ export function TokensInfo(props: { value: Token[] }) {
                     <Tip
                       dropProps={{ align: { left: "right" } }}
                       content={<TipContent message={"Outdated"} />}
-                      plain
                     >
                       <span>
                         <Alert size="small" />
@@ -158,7 +187,7 @@ export function TokensInfo(props: { value: Token[] }) {
                 </Box>
                 {item.isERC1155 ? (
                   <Text size={"small"} color={"minorText"}>
-                    Token ID: {item.tokenID}{" "}
+                    <b>Token ID</b>: {item.tokenID}{" "}
                   </Text>
                 ) : null}
               </Box>
@@ -167,14 +196,14 @@ export function TokensInfo(props: { value: Token[] }) {
           renderValue={() => (
             <Box direction={"row"} style={{ paddingTop: "3px" }}>
               {erc20Tokens.length ? (
-                <Box style={{ marginRight: "10px" }} direction={"row"}>
+                <Box direction={"row"}>
                   HRC20{" "}
                   <Box
                     background={"backgroundBack"}
                     style={{
-                      width: "20px",
+                      minWidth: "20px",
                       height: "20px",
-                      marginLeft: "5px",
+                      marginLeft: "4px",
                       textAlign: "center",
                       borderRadius: "4px",
                     }}
@@ -184,14 +213,14 @@ export function TokensInfo(props: { value: Token[] }) {
                 </Box>
               ) : null}
               {erc721Tokens.length ? (
-                <Box direction={"row"}>
+                <Box direction={"row"} margin={{ left: '8px' }}>
                   HRC721{" "}
                   <Box
                     background={"backgroundBack"}
                     style={{
-                      width: "20px",
+                      minWidth: "20px",
                       height: "20px",
-                      marginLeft: "5px",
+                      marginLeft: "4px",
                       textAlign: "center",
                       borderRadius: "4px",
                     }}
@@ -201,14 +230,14 @@ export function TokensInfo(props: { value: Token[] }) {
                 </Box>
               ) : null}
               {erc1155Tokens.length ? (
-                <Box direction={"row"}>
+                <Box direction={"row"} margin={{ left: '8px' }}>
                   HRC1155{" "}
                   <Box
                     background={"backgroundBack"}
                     style={{
-                      width: "20px",
+                      minWidth: "20px",
                       height: "20px",
-                      marginLeft: "5px",
+                      marginLeft: "4px",
                       textAlign: "center",
                       borderRadius: "4px",
                     }}
@@ -226,8 +255,9 @@ export function TokensInfo(props: { value: Token[] }) {
                 <Box
                   style={{
                     minHeight: "35px",
-                    borderRadius: "8px",
-                    marginBottom: "10px",
+                    borderTopLeftRadius: '4px',
+                    borderTopRightRadius: '4px',
+                    // marginBottom: "10px",
                     marginTop: "10px",
                   }}
                   pad={"xsmall"}
@@ -243,9 +273,10 @@ export function TokensInfo(props: { value: Token[] }) {
                 <Box
                   style={{
                     minHeight: "35px",
-                    borderRadius: "8px",
-                    marginBottom: "10px",
-                    marginTop: "10px",
+                    borderTopLeftRadius: '4px',
+                    borderTopRightRadius: '4px',
+                    // marginBottom: "10px",
+                    marginTop: "24px",
                   }}
                   pad={"xsmall"}
                   background={"backgroundBack"}
@@ -260,9 +291,10 @@ export function TokensInfo(props: { value: Token[] }) {
                 <Box
                   style={{
                     minHeight: "35px",
-                    borderRadius: "8px",
-                    marginBottom: "10px",
-                    marginTop: "10px",
+                    borderTopLeftRadius: '4px',
+                    borderTopRightRadius: '4px',
+                    // marginBottom: "10px",
+                    marginTop: "24px",
                   }}
                   pad={"xsmall"}
                   background={"backgroundBack"}
@@ -272,6 +304,7 @@ export function TokensInfo(props: { value: Token[] }) {
               ),
             },
           ]}
+          onToggle={(isVisible: boolean) => setDropdownVisible(isVisible)}
         />
       </Box>
     </Box>
